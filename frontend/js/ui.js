@@ -142,6 +142,8 @@ var selectedMoeMailDomains = [];
 var allMoeMailDomains = []; // 存储所有可用域名及其配置映射
 var selectedCloudMailDomains = [];
 var allCloudMailDomains = []; // 存储所有 cloud-mail 域名及对应配置
+var selectedCFTempEmailDomains = [];
+var allCFTempEmailDomains = []; // 存储所有 CF 临时邮箱域名及对应配置
 
 // HTML 转义函数
 function escapeHtml(text) {
@@ -164,15 +166,17 @@ function selectEmailProvider(provider) {
   const outlookBtn = document.querySelector('label[onclick*="outlook"]');
   const moemailBtn = document.querySelector('label[onclick*="moemail"]');
   const cloudmailBtn = document.querySelector('label[onclick*="cloudmail"]');
+  const cftempemailBtn = document.querySelector('label[onclick*="cftempemail"]');
 
   // 全部还原
-  [outlookBtn, moemailBtn, cloudmailBtn].forEach(b => {
+  [outlookBtn, moemailBtn, cloudmailBtn, cftempemailBtn].forEach(b => {
     if (b) { b.style.borderColor = 'var(--border)'; b.style.background = 'transparent'; }
   });
 
   let activeBtn = outlookBtn;
   if (provider === 'moemail') activeBtn = moemailBtn;
   else if (provider === 'cloudmail') activeBtn = cloudmailBtn;
+  else if (provider === 'cftempemail') activeBtn = cftempemailBtn;
   if (activeBtn) {
     activeBtn.style.borderColor = 'var(--primary)';
     activeBtn.style.background = 'rgba(59, 130, 246, 0.1)';
@@ -181,10 +185,12 @@ function selectEmailProvider(provider) {
   // 显示/隐藏配置块
   const moemailConfigDiv = document.getElementById('moemail-config-select');
   const cloudmailConfigDiv = document.getElementById('cloudmail-config-select');
+  const cftempemailConfigDiv = document.getElementById('cftempemail-config-select');
   const hintDiv = document.getElementById('email-provider-hint');
 
   if (moemailConfigDiv) moemailConfigDiv.style.display = (provider === 'moemail') ? 'block' : 'none';
   if (cloudmailConfigDiv) cloudmailConfigDiv.style.display = (provider === 'cloudmail') ? 'block' : 'none';
+  if (cftempemailConfigDiv) cftempemailConfigDiv.style.display = (provider === 'cftempemail') ? 'block' : 'none';
 
   if (provider === 'moemail') {
     hintDiv.removeAttribute('data-i18n');
@@ -196,6 +202,11 @@ function selectEmailProvider(provider) {
     hintDiv.textContent = _uiT('register.cloudmailHint', '使用 Cloud-Mail 自部署邮箱注册。⚠️ 每次注册会创建永久账号，需手动清理。');
     hintDiv.setAttribute('data-i18n', 'register.cloudmailHint');
     loadCloudMailDomainsToList();
+  } else if (provider === 'cftempemail') {
+    hintDiv.removeAttribute('data-i18n');
+    hintDiv.textContent = _uiT('register.cftempemailHint', '使用 CF 临时邮箱注册，基于 Cloudflare Worker。每次任务自动生成新邮箱。');
+    hintDiv.setAttribute('data-i18n', 'register.cftempemailHint');
+    loadCFTempEmailDomainsToList();
   } else {
     hintDiv.removeAttribute('data-i18n');
     hintDiv.textContent = _uiT('register.outlookHintFull', '使用微软邮箱进行注册，代理配置请在设置页设置。');
@@ -320,6 +331,109 @@ function toggleMoeMailDomain(domain, el) {
   updateDomainOptionStyles();
 }
 
+// ===== CF 临时邮箱域名加载/选择 =====
+async function loadCFTempEmailDomainsToList() {
+  const listDiv = document.getElementById('cfg-cftempemail-domains-list');
+  if (!listDiv) return;
+
+  listDiv.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;">' + _uiT('common.loading', '加载中...') + '</div>';
+
+  try {
+    const configs = await window.go.main.App.GetCFTempEmailConfigs();
+    if (!configs || configs.length === 0) {
+      listDiv.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;">' + _uiT('cftempemail.noDomainsHint', '暂无配置，请先在邮箱池页添加') + '</div>';
+      return;
+    }
+
+    let configStatus = {};
+    try {
+      const saved = localStorage.getItem('cftempemail-config-status');
+      if (saved) configStatus = JSON.parse(saved);
+    } catch (e) {}
+
+    allCFTempEmailDomains = [];
+    const domainConfigMap = {};
+
+    for (const cfg of configs) {
+      const status = configStatus[cfg.name];
+      if (!status || !status.tested || !status.success) continue;
+      const domains = (status.domains && status.domains.length > 0) ? status.domains : (cfg.domains || []);
+      for (const domain of domains) {
+        if (!domainConfigMap[domain]) domainConfigMap[domain] = [];
+        domainConfigMap[domain].push(cfg);
+      }
+    }
+
+    allCFTempEmailDomains = Object.keys(domainConfigMap).map(domain => ({
+      domain: domain,
+      configs: domainConfigMap[domain]
+    }));
+
+    if (allCFTempEmailDomains.length === 0) {
+      listDiv.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;">' + _uiT('cftempemail.noActiveDomain', '暂无可用域名，请先测试 CF 临时邮箱配置') + '</div>';
+      return;
+    }
+
+    let html = `
+      <div class="domain-mode-row">
+        <div class="domain-mode-btn selected" data-domain="__random__" onclick="toggleCFTempEmailDomain('__random__')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+          ${_uiT('register.modeRandom', '随机')}
+        </div>
+        <div class="domain-mode-btn" data-domain="__all__" onclick="toggleCFTempEmailDomain('__all__')">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+          ${_uiT('register.modeRoundRobin', '轮询')}
+        </div>
+      </div>
+      <div class="domain-chips-wrap">
+    `;
+
+    html += allCFTempEmailDomains.map((item) => {
+      return `<div class="domain-chip" data-domain="${escapeHtml(item.domain)}" onclick="toggleCFTempEmailDomain('${escapeHtml(item.domain)}')" title="${item.configs.length} 个配置">${escapeHtml(item.domain)}</div>`;
+    }).join('');
+
+    html += '</div>';
+    listDiv.innerHTML = html;
+    selectedCFTempEmailDomains = ['__random__'];
+    updateCFTempEmailDomainStyles();
+  } catch (e) {
+    console.error('加载 CF 临时邮箱域名失败:', e);
+    listDiv.innerHTML = '<div style="text-align:center;color:var(--danger);font-size:12px;padding:12px;">加载失败</div>';
+  }
+}
+
+function updateCFTempEmailDomainStyles() {
+  const container = document.getElementById('cfg-cftempemail-domains-list');
+  if (!container) return;
+  container.querySelectorAll('.domain-mode-btn').forEach(el => {
+    const d = el.getAttribute('data-domain');
+    el.classList.toggle('selected', selectedCFTempEmailDomains.includes(d));
+  });
+  container.querySelectorAll('.domain-chip').forEach(el => {
+    const d = el.getAttribute('data-domain');
+    el.classList.toggle('selected', selectedCFTempEmailDomains.includes(d));
+  });
+}
+
+function toggleCFTempEmailDomain(domain) {
+  const isSelected = selectedCFTempEmailDomains.includes(domain);
+  if (domain === '__random__' || domain === '__all__') {
+    if (isSelected) {
+      selectedCFTempEmailDomains = selectedCFTempEmailDomains.filter(d => d !== domain);
+    } else {
+      selectedCFTempEmailDomains = [domain];
+    }
+  } else {
+    selectedCFTempEmailDomains = selectedCFTempEmailDomains.filter(d => d !== '__random__' && d !== '__all__');
+    if (isSelected) {
+      selectedCFTempEmailDomains = selectedCFTempEmailDomains.filter(d => d !== domain);
+    } else {
+      selectedCFTempEmailDomains.push(domain);
+    }
+  }
+  updateCFTempEmailDomainStyles();
+}
+
 // 全选域名
 function selectAllMoeMailDomains() {
   selectedMoeMailDomains = allMoeMailDomains.map(item => item.domain);
@@ -434,6 +548,11 @@ function toggleCloudMailDomain(domain) {
 function selectAllCloudMailDomains() {
   selectedCloudMailDomains = allCloudMailDomains.map(item => item.domain);
   updateCloudMailDomainStyles();
+}
+
+function selectAllCFTempEmailDomains() {
+  selectedCFTempEmailDomains = allCFTempEmailDomains.map(item => item.domain);
+  updateCFTempEmailDomainStyles();
 }
 
 // 关闭任务模态框

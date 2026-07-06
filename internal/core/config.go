@@ -38,6 +38,11 @@ type Config struct {
 	CloudMailConfig   *email.CloudMailConfig
 	CloudMailProvider *email.CloudMailProvider
 
+	UseCFTempEmail      bool
+	CFTempEmailConfig   *email.CFTempEmailConfig
+	CFTempEmailProvider *email.CFTempEmailProvider
+	CFTempEmailJWT      string
+
 	MoEmailBaseURL string
 	MoEmailAPIKey  string
 }

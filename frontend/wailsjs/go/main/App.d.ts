@@ -10,6 +10,8 @@ export function AddProxyEntry(arg1:string,arg2:string,arg3:number):Promise<Recor
 
 export function CancelUpdate():Promise<Record<string, any>>;
 
+export function ChangeSubscriptionForAccount(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<Record<string, any>>;
+
 export function CheckLicense():Promise<Record<string, any>>;
 
 export function CheckUpdate():Promise<Record<string, any>>;
@@ -25,6 +27,10 @@ export function DeleteProxyEntry(arg1:string):Promise<Record<string, any>>;
 export function DetectProxy(arg1:string):Promise<proxy.Info>;
 
 export function DownloadUpdate():Promise<Record<string, any>>;
+
+export function ExportAccounts(arg1:string):Promise<Record<string, any>>;
+
+export function GetCFTempEmailConfigs():Promise<Array<email.CFTempEmailConfig>>;
 
 export function GetCloudMailConfigs():Promise<Array<email.CloudMailConfig>>;
 
@@ -74,6 +80,8 @@ export function ResetProxy():Promise<Record<string, any>>;
 
 export function ResetResultOutputDir():Promise<Record<string, any>>;
 
+export function SaveCFTempEmailConfigs(arg1:string):Promise<Record<string, any>>;
+
 export function SaveCloudMailConfigs(arg1:string):Promise<Record<string, any>>;
 
 export function SaveMoeMailConfigs(arg1:string):Promise<Record<string, any>>;
@@ -93,6 +101,8 @@ export function SetResultOutputDir(arg1:string):Promise<Record<string, any>>;
 export function StartTask(arg1:task.StartTaskRequest):Promise<Record<string, any>>;
 
 export function StopTask():Promise<Record<string, any>>;
+
+export function TestCFTempEmailConnection(arg1:string):Promise<Record<string, any>>;
 
 export function TestCloudMailConnection(arg1:string):Promise<Record<string, any>>;
 

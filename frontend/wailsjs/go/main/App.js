@@ -14,6 +14,10 @@ export function CancelUpdate() {
   return window['go']['main']['App']['CancelUpdate']();
 }
 
+export function ChangeSubscriptionForAccount(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['ChangeSubscriptionForAccount'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
 export function CheckLicense() {
   return window['go']['main']['App']['CheckLicense']();
 }
@@ -44,6 +48,14 @@ export function DetectProxy(arg1) {
 
 export function DownloadUpdate() {
   return window['go']['main']['App']['DownloadUpdate']();
+}
+
+export function ExportAccounts(arg1) {
+  return window['go']['main']['App']['ExportAccounts'](arg1);
+}
+
+export function GetCFTempEmailConfigs() {
+  return window['go']['main']['App']['GetCFTempEmailConfigs']();
 }
 
 export function GetCloudMailConfigs() {
@@ -142,6 +154,10 @@ export function ResetResultOutputDir() {
   return window['go']['main']['App']['ResetResultOutputDir']();
 }
 
+export function SaveCFTempEmailConfigs(arg1) {
+  return window['go']['main']['App']['SaveCFTempEmailConfigs'](arg1);
+}
+
 export function SaveCloudMailConfigs(arg1) {
   return window['go']['main']['App']['SaveCloudMailConfigs'](arg1);
 }
@@ -180,6 +196,10 @@ export function StartTask(arg1) {
 
 export function StopTask() {
   return window['go']['main']['App']['StopTask']();
+}
+
+export function TestCFTempEmailConnection(arg1) {
+  return window['go']['main']['App']['TestCFTempEmailConnection'](arg1);
 }
 
 export function TestCloudMailConnection(arg1) {

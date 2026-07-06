@@ -1,5 +1,23 @@
 export namespace email {
 	
+	export class CFTempEmailConfig {
+	    name: string;
+	    url: string;
+	    adminAuth: string;
+	    domains: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CFTempEmailConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.adminAuth = source["adminAuth"];
+	        this.domains = source["domains"];
+	    }
+	}
 	export class CloudMailConfig {
 	    name: string;
 	    url: string;
@@ -104,6 +122,9 @@ export namespace task {
 	    cloudmailDomains: string[];
 	    cloudmailConfigs: Record<string, Array<email.CloudMailConfig>>;
 	    cloudmailRandomMode: boolean;
+	    cftempemailDomains: string[];
+	    cftempemailConfigs: Record<string, Array<email.CFTempEmailConfig>>;
+	    cftempemailRandomMode: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new StartTaskRequest(source);
@@ -122,6 +143,9 @@ export namespace task {
 	        this.cloudmailDomains = source["cloudmailDomains"];
 	        this.cloudmailConfigs = this.convertValues(source["cloudmailConfigs"], Array<email.CloudMailConfig>, true);
 	        this.cloudmailRandomMode = source["cloudmailRandomMode"];
+	        this.cftempemailDomains = source["cftempemailDomains"];
+	        this.cftempemailConfigs = this.convertValues(source["cftempemailConfigs"], Array<email.CFTempEmailConfig>, true);
+	        this.cftempemailRandomMode = source["cftempemailRandomMode"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

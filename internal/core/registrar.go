@@ -304,6 +304,13 @@ func (r *Registrar) Step3Email() error {
 		log.Printf("email=%s", r.Email)
 		return nil
 	}
+	if r.Cfg.UseCFTempEmail && r.Cfg.CFTempEmailProvider != nil {
+		log.Println("[3] 使用 CF 临时邮箱（已创建）")
+		r.EmailSvc = email.NewCFTempEmailService(r.Cfg.CFTempEmailProvider)
+		r.Email = r.EmailSvc.GetAddress()
+		log.Printf("email=%s", r.Email)
+		return nil
+	}
 	if r.Cfg.UseMoeMail && r.Cfg.MoeMailProvider != nil {
 		log.Println("[3] 使用 MoeMail 邮箱（已创建）")
 		r.EmailSvc = email.NewMoEmailServiceFromProvider(r.Cfg.MoeMailProvider)

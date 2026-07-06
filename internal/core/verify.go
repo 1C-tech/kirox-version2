@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"strings"
 
 	fhttp "github.com/bogdanfinn/fhttp"
@@ -47,7 +48,28 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 	expiresIn, _ := tok["expiresIn"].(float64)
 	log.Printf("Token 刷新成功, expiresIn=%ds", int(expiresIn))
 
-	usageURL := "https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST&isEmailRequired=true"
+	// 先调用 Kiro refreshToken 获取 profileArn
+	profileARN := ""
+	kiroRefreshBody, _ := json.Marshal(map[string]string{
+		"clientId":     r.ClientID,
+		"clientSecret": r.ClientSecret,
+		"refreshToken": refreshToken,
+		"grantType":    "refresh_token",
+		"idc_region":   "us-east-1",
+	})
+	kiroRes := queryPostEndpoint(client, "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", kiroRefreshBody)
+	if kiroRes.ok {
+		var kiroAuth map[string]interface{}
+		json.Unmarshal(kiroRes.body, &kiroAuth)
+		if arn, ok := kiroAuth["profileArn"].(string); ok && arn != "" {
+			profileARN = arn
+		}
+	}
+	if kiroRes.suspended {
+		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
+	}
+
+	usageURL := fmt.Sprintf("https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST&isEmailRequired=true&profileArn=%s", url.QueryEscape(profileARN))
 	usageRes := queryGetEndpoint(client, access, usageURL)
 	if usageRes.suspended {
 		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
@@ -58,17 +80,6 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 
 	modelRes := queryGetEndpoint(client, access, "https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR")
 	if modelRes.suspended {
-		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
-	}
-
-	kiroRefreshBody, _ := json.Marshal(map[string]string{
-		"clientId":     r.ClientID,
-		"clientSecret": r.ClientSecret,
-		"refreshToken": refreshToken,
-		"grantType":    "refresh_token",
-	})
-	kiroRes := queryPostEndpoint(client, "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", kiroRefreshBody)
-	if kiroRes.suspended {
 		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
 	}
 

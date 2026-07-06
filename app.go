@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"log"
 	"os"
 	"reg_go/internal/browser"
+	"reg_go/internal/core"
 	"reg_go/internal/data"
 	"reg_go/internal/email"
 	"reg_go/internal/proxy"
@@ -185,6 +187,20 @@ func (a *App) SaveCloudMailConfigs(configsJSON string) map[string]interface{} {
 
 func (a *App) TestCloudMailConnection(configJSON string) map[string]interface{} {
 	return email.TestCloudMailConnection(configJSON)
+}
+
+// ---- CF 临时邮箱 (Cloudflare Temp Email) ----
+
+func (a *App) GetCFTempEmailConfigs() []email.CFTempEmailConfig {
+	return email.GetCFTempEmailConfigs()
+}
+
+func (a *App) SaveCFTempEmailConfigs(configsJSON string) map[string]interface{} {
+	return email.SaveCFTempEmailConfigs(configsJSON)
+}
+
+func (a *App) TestCFTempEmailConnection(configJSON string) map[string]interface{} {
+	return email.TestCFTempEmailConnection(configJSON)
 }
 
 // ---- Outlook ----
@@ -406,6 +422,48 @@ func (a *App) LoadOutputAccounts() map[string]interface{} {
 		}
 	}
 	return map[string]interface{}{"success": true, "accounts": items, "outputDir": storage.GetResultOutputDir()}
+}
+
+// ExportAccounts 批量导出账号为完整 Kiro JSON 格式（并发，默认 5）
+func (a *App) ExportAccounts(accountsJSON string) map[string]interface{} {
+	var inputs []core.ExportAccountInput
+	if err := json.Unmarshal([]byte(accountsJSON), &inputs); err != nil {
+		return map[string]interface{}{"error": "参数格式错误: " + err.Error()}
+	}
+	results, errs := core.ExportAccounts(inputs, 5)
+	return map[string]interface{}{
+		"accounts": results,
+		"errors":   errs,
+	}
+}
+
+// QuickExportAccounts 离线快速导出：零 API 调用，仅导出本地存储的账号基础信息。
+func (a *App) QuickExportAccounts(accountsJSON string) map[string]interface{} {
+	var inputs []core.ExportAccountInput
+	if err := json.Unmarshal([]byte(accountsJSON), &inputs); err != nil {
+		return map[string]interface{}{"error": "参数格式错误: " + err.Error()}
+	}
+	results := core.QuickExportAccounts(inputs)
+	return map[string]interface{}{
+		"accounts": results,
+		"errors":   []map[string]interface{}{},
+	}
+}
+
+// ChangeSubscription 修改单个账号的订阅类型
+func (a *App) ChangeSubscriptionForAccount(email, refreshToken, clientID, clientSecret, region, provider, subscriptionType string) map[string]interface{} {
+	result, err := core.ChangeSubscription(core.ExportAccountInput{
+		Email:        email,
+		RefreshToken: refreshToken,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		Region:       region,
+		Provider:     provider,
+	}, subscriptionType)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return result
 }
 
 // GetSubscriptionPlans 用第一个有效账号拉取可用订阅计划（可指定邮箱）

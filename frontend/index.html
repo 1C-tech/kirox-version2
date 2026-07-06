@@ -508,6 +508,8 @@
               <button onclick="openSubscriptionPlanModal()" id="sub-batch-btn" class="btn btn-dark btn-sm" data-i18n="subscription.batchGet">一键获取选中</button>
               <button onclick="copyAllSubscriptionLinks()" class="btn btn-secondary btn-sm" data-i18n="subscription.copyLinks">复制选中链接</button>
               <button onclick="reloadSubscriptionAccounts()" class="btn btn-secondary btn-sm" data-i18n="subscription.reload">重新加载账号</button>
+              <button onclick="exportKiroAccountsWithSub()" class="btn btn-dark btn-sm">📤 批量导出 Kiro JSON</button>
+              <button onclick="quickExportKiroAccounts()" class="btn btn-dark btn-sm">⚡ 快速导出（离线）</button>
               <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-left:auto;">
                 <span data-i18n="subscription.concurrency">并发</span>
                 <input type="number" id="sub-concurrency" min="1" max="20" value="3" class="form-input" style="width:60px;text-align:center;height:28px;padding:2px;">
@@ -636,6 +638,15 @@
                   <span data-i18n="register.cloudmail">Cloud-Mail</span>
                 </div>
               </label>
+              <label style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px;border:2px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:all 0.2s;" onclick="selectEmailProvider('cftempemail')">
+                <input type="radio" name="email-provider" value="cftempemail" style="display:none;">
+                <div id="provider-cftempemail" style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--text);">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#f48120" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><path d="M16 8l-8 8M8 8l8 8"/>
+                  </svg>
+                  <span data-i18n="register.cftempemail">CF 临时邮箱</span>
+                </div>
+              </label>
             </div>
           </div>
 
@@ -667,6 +678,22 @@
                 <button type="button" onclick="selectAllCloudMailDomains()" class="moemail-select-all-btn" data-i18n="register.selectAllDomain">全选域名</button>
               </label>
               <div id="cfg-cloudmail-domains-list" class="moemail-domains-container">
+                <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;" data-i18n="common.loading">加载中...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CF 临时邮箱 域名选择 -->
+          <div id="cftempemail-config-select" style="display:none;margin-bottom:16px;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#f48120;"><circle cx="12" cy="12" r="10"/><path d="M16 8l-8 8M8 8l8 8"/></svg>
+                  <span data-i18n="register.selectDomain">选择域名</span>
+                </div>
+                <button type="button" onclick="selectAllCFTempEmailDomains()" class="moemail-select-all-btn" data-i18n="register.selectAllDomain">全选域名</button>
+              </label>
+              <div id="cfg-cftempemail-domains-list" class="moemail-domains-container">
                 <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px;" data-i18n="common.loading">加载中...</div>
               </div>
             </div>
@@ -804,6 +831,62 @@
               </div>
             </div>
             <div id="cloudmail-inline-list" class="moemail-config-list"></div>
+          </div>
+        </div>
+
+        <!-- CF 临时邮箱 (Cloudflare Temp Email) 配置 -->
+        <div class="card" style="flex-shrink:0;margin-bottom:20px;">
+          <div class="settings-group">
+            <div class="settings-group-title" style="display:flex;align-items:center;justify-content:space-between;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#f48120" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M16 8l-8 8M8 8l8 8"/>
+                </svg>
+                <span data-i18n="accounts.cftempemailTitle">CF 临时邮箱</span>
+              </div>
+              <span id="settings-cftempemail-summary" style="font-size:12px;font-weight:600;color:var(--text-muted);padding:4px 10px;background:var(--bg-subtle);border-radius:6px;" data-i18n="cftempemail.summaryNone">未配置</span>
+            </div>
+            <div class="moemail-add-section">
+              <div class="moemail-add-header">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                <span data-i18n="accounts.addConfig">添加新配置</span>
+              </div>
+              <div class="moemail-add-body">
+                <div class="moemail-input-row">
+                  <div class="moemail-input-group" style="flex:1;">
+                    <label><span data-i18n="accounts.configName">名称</span> <span style="font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;" data-i18n="accounts.optional">(可选)</span></label>
+                    <input type="text" id="cftempemail-inline-name" placeholder="自动生成" data-i18n-placeholder="accounts.configNamePlaceholder" class="form-input">
+                  </div>
+                  <div class="moemail-input-group" style="flex:2;">
+                    <label data-i18n="accounts.apiUrl">Worker URL</label>
+                    <input type="text" id="cftempemail-inline-url" placeholder="https://xxx.workers.dev" class="form-input">
+                  </div>
+                </div>
+                <div class="moemail-input-row">
+                  <div class="moemail-input-group" style="flex:1;">
+                    <label data-i18n="cftempemail.adminAuth">Admin 鉴权密码</label>
+                    <input type="password" id="cftempemail-inline-adminauth" placeholder="••••••••" class="form-input">
+                  </div>
+                  <div class="moemail-input-group" style="flex:1;">
+                    <label data-i18n="cftempemail.domains">域名</label>
+                    <input type="text" id="cftempemail-inline-domains" placeholder="domain1.com, domain2.com" data-i18n-placeholder="cftempemail.domainsPlaceholder" class="form-input">
+                  </div>
+                </div>
+                <div class="moemail-action-row">
+                  <button onclick="inlineTestCFTempEmail()" class="btn btn-secondary btn-sm" id="cftempemail-inline-test-btn">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span data-i18n="accounts.testConnection">测试连接</span>
+                  </button>
+                  <button onclick="inlineAddCFTempEmail()" class="btn btn-dark btn-sm">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                    <span data-i18n="accounts.addConfigBtn">添加配置</span>
+                  </button>
+                  <span id="cftempemail-inline-status" class="moemail-status-text"></span>
+                </div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5;">域名请手动填写（逗号分隔），测试连接时仅验证 Worker 可达性。</div>
+              </div>
+            </div>
+            <div id="cftempemail-inline-list" class="moemail-config-list"></div>
           </div>
         </div>
 
@@ -954,6 +1037,7 @@
 <script src="js/accounts.js"></script>
 <script src="js/moemail.js"></script>
 <script src="js/cloudmail.js"></script>
+<script src="js/cftempemail.js"></script>
 <script src="js/task.js"></script>
 <script src="js/overview.js"></script>
 <script src="js/subscription.js"></script>

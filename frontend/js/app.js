@@ -357,6 +357,32 @@ function getFormConfig() {
     }
   }
 
+  // 如果选择了 CF 临时邮箱，添加域名信息和配置
+  if (config.emailProvider === 'cftempemail') {
+    if (!selectedCFTempEmailDomains || selectedCFTempEmailDomains.length === 0) {
+      throw new Error('请选择至少一个 CF 临时邮箱域名');
+    }
+
+    if (selectedCFTempEmailDomains.includes('__random__') || selectedCFTempEmailDomains.includes('__all__')) {
+      config.cftempemailDomains = allCFTempEmailDomains.map(item => item.domain);
+      config.cftempemailConfigs = {};
+      allCFTempEmailDomains.forEach(item => {
+        config.cftempemailConfigs[item.domain] = item.configs;
+      });
+      config.cftempemailRandomMode = selectedCFTempEmailDomains.includes('__random__');
+    } else {
+      config.cftempemailDomains = selectedCFTempEmailDomains;
+      config.cftempemailConfigs = {};
+      selectedCFTempEmailDomains.forEach(domain => {
+        const item = allCFTempEmailDomains.find(d => d.domain === domain);
+        if (item) {
+          config.cftempemailConfigs[domain] = item.configs;
+        }
+      });
+      config.cftempemailRandomMode = false;
+    }
+  }
+
   return config;
 }
 

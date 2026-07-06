@@ -23,7 +23,7 @@ type StartTaskRequest struct {
 	Concurrency       int                              `json:"concurrency"`
 	Delay             int                              `json:"delay"`
 	OutputPath        string                           `json:"outputPath"`
-	EmailProvider     string                           `json:"emailProvider"`     // "outlook" / "moemail" / "cloudmail"
+	EmailProvider     string                           `json:"emailProvider"`     // "outlook" / "moemail" / "cloudmail" / "cftempemail"
 	MoeMailDomains    []string                         `json:"moemailDomains"`    // 选中的域名列表
 	MoeMailConfigs    map[string][]email.MoeMailConfig `json:"moemailConfigs"`    // 域名 -> 配置列表映射
 	MoeMailRandomMode bool                             `json:"moemailRandomMode"` // 是否为随机模式
@@ -31,6 +31,10 @@ type StartTaskRequest struct {
 	CloudMailDomains    []string                            `json:"cloudmailDomains"`
 	CloudMailConfigs    map[string][]email.CloudMailConfig  `json:"cloudmailConfigs"`
 	CloudMailRandomMode bool                                `json:"cloudmailRandomMode"`
+
+	CFTempEmailDomains    []string                                `json:"cftempemailDomains"`
+	CFTempEmailConfigs    map[string][]email.CFTempEmailConfig    `json:"cftempemailConfigs"`
+	CFTempEmailRandomMode bool                                    `json:"cftempemailRandomMode"`
 }
 
 // StartTask 公开方法（包装器）
@@ -73,6 +77,15 @@ func startTask(req StartTaskRequest) map[string]interface{} {
 		if len(req.CloudMailConfigs) == 0 {
 			Manager.mu.Unlock()
 			return map[string]interface{}{"error": "cloud-mail 配置缺失"}
+		}
+	} else if emailProvider == "cftempemail" {
+		if len(req.CFTempEmailDomains) == 0 {
+			Manager.mu.Unlock()
+			return map[string]interface{}{"error": "请选择至少一个 CF 临时邮箱域名"}
+		}
+		if len(req.CFTempEmailConfigs) == 0 {
+			Manager.mu.Unlock()
+			return map[string]interface{}{"error": "CF 临时邮箱配置缺失"}
 		}
 	} else {
 		// Outlook 模式：加载账号列表
@@ -230,6 +243,25 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 		log.Printf("[Kiro] cloud-mail 域名池: %v (共 %d 个域名)", cloudmailDomainPool, len(cloudmailDomainPool))
 	}
 
+	// 预先准备 CF 临时邮箱域名池
+	var cftempemailDomainPool []string
+	var cftempemailDomainConfigs map[string][]email.CFTempEmailConfig
+	if emailProvider == "cftempemail" {
+		taskConfig.UseCFTempEmail = true
+		cftempemailDomainPool = req.CFTempEmailDomains
+		cftempemailDomainConfigs = req.CFTempEmailConfigs
+
+		if len(cftempemailDomainPool) == 0 || len(cftempemailDomainConfigs) == 0 {
+			log.Println("[Kiro] CF 临时邮箱域名或配置为空，任务终止")
+			Manager.mu.Lock()
+			Manager.running = false
+			Manager.mu.Unlock()
+			return
+		}
+
+		log.Printf("[Kiro] CF 临时邮箱域名池: %v (共 %d 个域名)", cftempemailDomainPool, len(cftempemailDomainPool))
+	}
+
 	// 统计计数器
 	var statsMu sync.Mutex
 	var taskDurations []float64
@@ -285,6 +317,25 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 		}
 
 		configs := cloudmailDomainConfigs[domain]
+		return domain, configs[rand.Intn(len(configs))]
+	}
+
+	// CF 临时邮箱域名池索引（并发安全）
+	var cftempemailDomainIdx int
+	var cftempemailDomainMu sync.Mutex
+	nextCFTempEmailDomain := func() (string, email.CFTempEmailConfig) {
+		cftempemailDomainMu.Lock()
+		defer cftempemailDomainMu.Unlock()
+
+		var domain string
+		if req.CFTempEmailRandomMode {
+			domain = cftempemailDomainPool[rand.Intn(len(cftempemailDomainPool))]
+		} else {
+			domain = cftempemailDomainPool[cftempemailDomainIdx%len(cftempemailDomainPool)]
+			cftempemailDomainIdx++
+		}
+
+		configs := cftempemailDomainConfigs[domain]
 		return domain, configs[rand.Intn(len(configs))]
 	}
 
@@ -366,6 +417,26 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 			cfgCopy := config
 			taskCfg.CloudMailConfig = &cfgCopy
 			currentEmail = provider.GetAddress()
+		} else if emailProvider == "cftempemail" {
+			domain, config := nextCFTempEmailDomain()
+			emailName := email.GenerateEmailName(i)
+
+			log.Printf("[Kiro][%d/%d] 创建 CF 临时邮箱: %s@%s (配置: %s)", i+1, req.Count, emailName, domain, config.Name)
+
+			provider, err := email.NewCFTempEmailProvider(config, emailName, domain)
+			if err != nil {
+				log.Printf("[Kiro][%d/%d] 生成 CF 临时邮箱失败: %v", i+1, req.Count, err)
+				Manager.mu.Lock()
+				Manager.completed++
+				Manager.failed++
+				Manager.mu.Unlock()
+				return
+			}
+
+			taskCfg.CFTempEmailProvider = provider
+			cfgCopy := config
+			taskCfg.CFTempEmailConfig = &cfgCopy
+			currentEmail = provider.GetAddress()
 		}
 
 		log.Printf("[Kiro][%d/%d] 开始注册", i+1, req.Count)
@@ -407,7 +478,64 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 
 			errorMsg, _ := result["error"].(string)
 
-			// AWS 熔断：任一任务遇到 400/BLOCKED/IP-flagged 类错误就终止全部
+			// send-otp 400: 临时邮箱模式下优先换邮箱重试，不直接熔断
+			// CPA 项目逻辑：单个邮箱/域名被标，换一个即可，不应终止全部任务
+			if strings.Contains(errorMsg, "send-otp 失败 (400)") && (emailProvider == "cftempemail" || emailProvider == "moemail" || emailProvider == "cloudmail") {
+				log.Printf("[Kiro][%d/%d] send-otp 400，换邮箱重试 (当前: %s)", i+1, req.Count, currentEmail)
+				var newProviderCreated bool
+				if emailProvider == "cftempemail" {
+					domain, config := nextCFTempEmailDomain()
+					emailName := email.GenerateEmailName(i*100 + attempt)
+					provider, err := email.NewCFTempEmailProvider(config, emailName, domain)
+					if err == nil {
+						taskCfg.CFTempEmailProvider = provider
+						cfgCopy := config
+						taskCfg.CFTempEmailConfig = &cfgCopy
+						currentEmail = provider.GetAddress()
+						taskCfg.Password = core.GenPassword()
+						attempt = -1
+						newProviderCreated = true
+						log.Printf("[Kiro][%d/%d] 新邮箱: %s，继续注册", i+1, req.Count, currentEmail)
+					} else {
+						log.Printf("[Kiro][%d/%d] 创建新 CF 邮箱失败: %v", i+1, req.Count, err)
+					}
+				} else if emailProvider == "moemail" {
+					domain, config := nextMoeMailDomain()
+					emailName := email.GenerateEmailName(i*100 + attempt)
+					provider, err := email.NewMoeMailProvider(config, emailName, 3600000, domain)
+					if err == nil {
+						taskCfg.MoeMailProvider = provider
+						currentEmail = provider.GetAddress()
+						taskCfg.Password = core.GenPassword()
+						attempt = -1
+						newProviderCreated = true
+						log.Printf("[Kiro][%d/%d] 新邮箱: %s，继续注册", i+1, req.Count, currentEmail)
+					} else {
+						log.Printf("[Kiro][%d/%d] 创建新 MoeMail 邮箱失败: %v", i+1, req.Count, err)
+					}
+				} else if emailProvider == "cloudmail" {
+					domain, config := nextCloudMailDomain()
+					emailName := email.GenerateEmailName(i*100 + attempt)
+					provider, err := email.NewCloudMailProvider(config, emailName, domain)
+					if err == nil {
+						taskCfg.CloudMailProvider = provider
+						cfgCopy := config
+						taskCfg.CloudMailConfig = &cfgCopy
+						currentEmail = provider.GetAddress()
+						taskCfg.Password = core.GenPassword()
+						attempt = -1
+						newProviderCreated = true
+						log.Printf("[Kiro][%d/%d] 新邮箱: %s，继续注册", i+1, req.Count, currentEmail)
+					} else {
+						log.Printf("[Kiro][%d/%d] 创建新 CloudMail 邮箱失败: %v", i+1, req.Count, err)
+					}
+				}
+				if newProviderCreated {
+					continue retryLoop
+				}
+			}
+
+			// AWS 熔断：非临时邮箱的 400/BLOCKED/IP-flagged 类错误才终止全部
 			// 触发后继续跑只会烧邮箱、烧代理额度
 			if isKillSwitchError(errorMsg) {
 				otpKillOnce.Do(func() {

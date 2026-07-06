@@ -85,6 +85,40 @@ func (a *moEmailAdapter) GetAddress() string {
 	return a.provider.GetAddress()
 }
 
+// cfTempEmailAdapter 适配器，将 CFTempEmailProvider 包装为 TempEmailService
+type cfTempEmailAdapter struct {
+	provider *CFTempEmailProvider
+}
+
+// NewCFTempEmailService 用已创建的 CFTempEmailProvider 构造 TempEmailService
+func NewCFTempEmailService(provider *CFTempEmailProvider) TempEmailService {
+	return &cfTempEmailAdapter{provider: provider}
+}
+
+// Create 已在 NewCFTempEmailProvider 时创建好，直接返回地址
+func (a *cfTempEmailAdapter) Create() string {
+	if a.provider == nil {
+		return ""
+	}
+	return a.provider.GetAddress()
+}
+
+// WaitForCode 等待验证码
+func (a *cfTempEmailAdapter) WaitForCode(timeout, interval int) (string, error) {
+	if a.provider == nil {
+		return "", nil
+	}
+	return a.provider.WaitForCode(timeout, interval)
+}
+
+// GetAddress 获取邮箱地址
+func (a *cfTempEmailAdapter) GetAddress() string {
+	if a.provider == nil {
+		return ""
+	}
+	return a.provider.GetAddress()
+}
+
 // cloudMailAdapter 适配器，将 CloudMailProvider 包装为 TempEmailService
 type cloudMailAdapter struct {
 	provider *CloudMailProvider
