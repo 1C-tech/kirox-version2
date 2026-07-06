@@ -181,6 +181,12 @@ func ExportAccount(acc ExportAccountInput) (*ExportedAccount, error) {
 
 	loginProvider := deriveLoginProvider(acc, kiroAuthToken)
 	profileARN := firstNonEmpty(acc.ProfileARN, stringField(kiroAuthToken, "profileArn"), stringField(acc.KiroProfile, "arn"))
+	if profileARN == "" {
+		profileARN = extractProfileARN(kiroAuthToken, firstNonEmpty(loginProvider, acc.Provider))
+		if profileARN != "" {
+			log.Printf("[Export] %s 缺少 profileArn，按 provider=%s 使用兜底 profileArn 查询 usage", acc.Email, firstNonEmpty(loginProvider, acc.Provider))
+		}
+	}
 
 	usageRaw := cloneMap(acc.KiroUsageRaw)
 	if profileARN != "" {

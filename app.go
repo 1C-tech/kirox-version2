@@ -436,6 +436,29 @@ func (a *App) LoadOutputAccounts() map[string]interface{} {
 	return map[string]interface{}{"success": true, "accounts": items, "outputDir": storage.GetResultOutputDir()}
 }
 
+// DeleteOutputAccounts 批量删除输出目录 accounts.json 中的 Kiro 注册结果账号。
+func (a *App) DeleteOutputAccounts(emailsJSON string) map[string]interface{} {
+	var emails []string
+	if err := json.Unmarshal([]byte(emailsJSON), &emails); err != nil {
+		return map[string]interface{}{"error": "参数格式错误: " + err.Error()}
+	}
+	removed := 0
+	for _, em := range emails {
+		if em == "" {
+			continue
+		}
+		ok, err := data.DeleteAccount(storage.GetResultOutputDir(), em)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error(), "removed": removed}
+		}
+		if ok {
+			removed++
+			subscription.DeleteCache(storage.GetDataDir(), em)
+		}
+	}
+	return map[string]interface{}{"success": true, "removed": removed}
+}
+
 // ExportAccounts 批量导出账号为完整 Kiro JSON 格式（并发，默认 5）
 func (a *App) ExportAccounts(accountsJSON string) map[string]interface{} {
 	var inputs []core.ExportAccountInput

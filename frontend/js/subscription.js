@@ -169,6 +169,33 @@ function getSelectedSubAccounts() {
   return subState.accounts.filter(function(a) { return a.selected; });
 }
 
+async function deleteSelectedOutputAccounts() {
+  var selected = getSelectedSubAccounts();
+  if (!selected.length) {
+    showToast(_subT('subscription.pickDeleteFirst', '请先勾选要删除的账号'), 'error');
+    return;
+  }
+  var emails = selected.map(function(a) { return a.email; }).filter(Boolean);
+  showConfirmModal(
+    _subT('subscription.deleteSelectedTitle', '删除选中账号'),
+    _subT('subscription.deleteSelectedMsg', { n: emails.length }, '确认从输出账号列表删除选中的 {n} 个账号？此操作不可恢复。'),
+    _subT('subscription.deleteConfirm', '确认删除'),
+    async function() {
+      try {
+        var res = await window.go.main.App.DeleteOutputAccounts(JSON.stringify(emails));
+        if (res.error) {
+          showToast(res.error, 'error');
+          return;
+        }
+        showToast(_subT('subscription.deletedSelected', { n: res.removed || 0 }, '已删除 {n} 个账号'));
+        await reloadSubscriptionAccounts();
+      } catch (e) {
+        showToast(_subT('subscription.deleteFailed', '删除失败') + ': ' + (e.message || e), 'error');
+      }
+    }
+  );
+}
+
 async function openSubscriptionPlanModal(singleIdx) {
   var isSingle = typeof singleIdx === 'number';
   if (!isSingle) {
@@ -416,8 +443,8 @@ function normalizeKiroExportInput(raw, email) {
     awsClientId: firstSubValue(raw.awsClientId, raw.clientId),
     awsClientSecret: firstSubValue(raw.awsClientSecret, raw.clientSecret),
 
-    kiroAccessToken: firstSubValue(raw.kiroAccessToken, raw.access_token, authRaw.accessToken),
-    kiroRefreshToken: firstSubValue(raw.kiroRefreshToken, raw.refresh_token, authRaw.refreshToken),
+    kiroAccessToken: firstSubValue(raw.kiroAccessToken, raw.access_token, authRaw.accessToken, authRaw.access_token),
+    kiroRefreshToken: firstSubValue(raw.kiroRefreshToken, raw.refresh_token, authRaw.refreshToken, authRaw.refresh_token),
     kiroClientId: firstSubValue(raw.kiroClientId, raw.kiro_client_id),
     kiroClientSecret: firstSubValue(raw.kiroClientSecret, raw.kiro_client_secret),
     kiroTokenType: firstSubValue(raw.kiroTokenType, raw.token_type, authRaw.tokenType),
@@ -425,7 +452,7 @@ function normalizeKiroExportInput(raw, email) {
 
     userId: firstSubValue(raw.userId, raw.user_id, authRaw.userId, authRaw.user_id),
     loginProvider: firstSubValue(raw.loginProvider, raw.login_provider, provider),
-    profileArn: firstSubValue(raw.profileArn, profileRaw.arn, authRaw.profileArn),
+    profileArn: firstSubValue(raw.profileArn, raw.profile_arn, profileRaw.arn, profileRaw.profileArn, profileRaw.profile_arn, authRaw.profileArn, authRaw.profile_arn),
     planName: firstSubValue(raw.planName, raw.plan_name),
     planTier: firstSubValue(raw.planTier, raw.plan_tier),
     creditsTotal: numberSubValue(raw.creditsTotal, raw.credits_total, raw.creditLimit),
