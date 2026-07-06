@@ -128,11 +128,13 @@ document.addEventListener('keydown', function(e) {
   // Ctrl+Enter 开始任务
   if (e.ctrlKey && e.key === 'Enter') {
     e.preventDefault();
-    if (!document.getElementById('btn-start').disabled) startTask();
+    var startBtn = document.querySelector('#btn-start:not(:disabled)');
+    if (startBtn) startTask();
   }
   // Esc 停止任务
   if (e.key === 'Escape') {
-    if (!document.getElementById('btn-stop').disabled) stopTask();
+    var stopBtn = document.querySelector('#btn-stop:not(:disabled)');
+    if (stopBtn) stopTask();
   }
 });
 
@@ -586,4 +588,3 @@ function closeKiroTaskModal() {
     });
   });
 })();
-

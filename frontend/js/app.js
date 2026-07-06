@@ -287,10 +287,12 @@ async function resetProxy() {
 
 // UI 状态
 function updateUIStatus(running) {
-  var btnStart = document.getElementById('btn-start');
-  var btnStop = document.getElementById('btn-stop');
-  if (btnStart) btnStart.disabled = running;
-  if (btnStop) btnStop.disabled = !running;
+  document.querySelectorAll('#btn-start').forEach(function(btn) {
+    btn.disabled = running;
+  });
+  document.querySelectorAll('#btn-stop').forEach(function(btn) {
+    btn.disabled = !running;
+  });
 }
 
 // 配置读写
@@ -625,4 +627,3 @@ function renderChangelog(md) {
   if (inList) html += '</ul>';
   return html;
 }
-

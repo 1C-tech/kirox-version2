@@ -22,6 +22,8 @@ export function ClearRegisteredOutlookAccounts():Promise<Record<string, any>>;
 
 export function DeleteOutlookAccount(arg1:string):Promise<Record<string, any>>;
 
+export function DeleteOutlookAccounts(arg1:string):Promise<Record<string, any>>;
+
 export function DeleteProxyEntry(arg1:string):Promise<Record<string, any>>;
 
 export function DetectProxy(arg1:string):Promise<proxy.Info>;

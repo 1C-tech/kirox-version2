@@ -67,8 +67,8 @@ func NewRegistrar(cfg *Config) *Registrar {
 	// 按代理绑定稳定指纹：同一出口 IP 下短时间内重复使用同一硬件身份，
 	// 只有 lsubid 前缀 / webpackHash 等真实浏览器会话间也会变的字段每次刷新。
 	identity := browser.IdentityForProxy(cfg.Proxy)
-	log.Printf("[指纹] Chrome: %s | GPU: %s | 内存: %dGB | 核心: %d | 分辨率: %dx%d (%d-bit)", 
-		identity.ChromeVer, identity.GPUModel, identity.DeviceMemory, identity.HardwareConcurrency, 
+	log.Printf("[指纹] Chrome: %s | GPU: %s | 内存: %dGB | 核心: %d | 分辨率: %dx%d (%d-bit)",
+		identity.ChromeVer, identity.GPUModel, identity.DeviceMemory, identity.HardwareConcurrency,
 		identity.Screen.Width, identity.Screen.Height, identity.Screen.ColorDepth)
 
 	client := httputil.NewTLSClient(cfg.Proxy, true, identity.ChromeVer)
@@ -105,6 +105,33 @@ func retryBackoff(attempt int) time.Duration {
 	return base + jitter
 }
 
+func (r *Registrar) requestContext() context.Context {
+	if r != nil && r.Ctx != nil {
+		return r.Ctx
+	}
+	return context.Background()
+}
+
+func (r *Registrar) sleepOrCanceled(d time.Duration) error {
+	if r != nil && r.Ctx != nil {
+		select {
+		case <-r.Ctx.Done():
+			return r.Ctx.Err()
+		case <-time.After(d):
+			return nil
+		}
+	}
+	time.Sleep(d)
+	return nil
+}
+
+func (r *Registrar) cancellationErr() error {
+	if r != nil && r.Ctx != nil && r.Ctx.Err() != nil {
+		return r.Ctx.Err()
+	}
+	return nil
+}
+
 // DoPost 发送 POST 请求（带自动重试）
 func (r *Registrar) DoPost(url string, payload interface{}, headers map[string]string) ([]byte, map[string][]string, error) {
 	const maxRetries = 2
@@ -115,16 +142,21 @@ func (r *Registrar) DoPost(url string, payload interface{}, headers map[string]s
 	}
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := r.cancellationErr(); err != nil {
+			return nil, nil, err
+		}
 		if attempt > 0 {
 			log.Printf("[HTTP] POST 重试 (%d/%d), 等待退避...", attempt, maxRetries)
-			time.Sleep(retryBackoff(attempt))
+			if err := r.sleepOrCanceled(retryBackoff(attempt)); err != nil {
+				return nil, nil, err
+			}
 		}
 
 		var body io.Reader
 		if payloadBytes != nil {
 			body = bytes.NewReader(payloadBytes)
 		}
-		req, err := http.NewRequest("POST", url, body)
+		req, err := http.NewRequestWithContext(r.requestContext(), "POST", url, body)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -150,12 +182,17 @@ func (r *Registrar) DoGet(url string, headers map[string]string) ([]byte, int, m
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := r.cancellationErr(); err != nil {
+			return nil, 0, nil, err
+		}
 		if attempt > 0 {
 			log.Printf("[HTTP] GET 重试 (%d/%d), 等待退避...", attempt, maxRetries)
-			time.Sleep(retryBackoff(attempt))
+			if err := r.sleepOrCanceled(retryBackoff(attempt)); err != nil {
+				return nil, 0, nil, err
+			}
 		}
 
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequestWithContext(r.requestContext(), "GET", url, nil)
 		if err != nil {
 			return nil, 0, nil, err
 		}
@@ -185,16 +222,21 @@ func (r *Registrar) DoPostRaw(url string, payload interface{}, headers map[strin
 	}
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := r.cancellationErr(); err != nil {
+			return nil, 0, nil, err
+		}
 		if attempt > 0 {
 			log.Printf("[HTTP] POST 重试 (%d/%d), 等待退避...", attempt, maxRetries)
-			time.Sleep(retryBackoff(attempt))
+			if err := r.sleepOrCanceled(retryBackoff(attempt)); err != nil {
+				return nil, 0, nil, err
+			}
 		}
 
 		var body io.Reader
 		if payloadBytes != nil {
 			body = bytes.NewReader(payloadBytes)
 		}
-		req, err := http.NewRequest("POST", url, body)
+		req, err := http.NewRequestWithContext(r.requestContext(), "POST", url, body)
 		if err != nil {
 			return nil, 0, nil, err
 		}

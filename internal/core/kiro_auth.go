@@ -69,7 +69,7 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 		"sec-fetch-user":            "?1",
 		"upgrade-insecure-requests": "1",
 	}
-	req1, _ := fhttp.NewRequest("GET", authURL, nil)
+	req1, _ := fhttp.NewRequestWithContext(r.requestContext(), "GET", authURL, nil)
 	httputil.SetHeaders(req1, navHeaders)
 	resp1, err := noRedirect.Do(req1)
 	if err != nil {
@@ -91,7 +91,7 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 
 	// 4. POST /authentication_result -> 拿到第一段 resume URL
 	authResultBody, _ := json.Marshal(map[string]string{"orchestrator_id": orchID})
-	req2, _ := fhttp.NewRequest("POST", r.Cfg.OIDCBase+"/authentication_result", bytes.NewReader(authResultBody))
+	req2, _ := fhttp.NewRequestWithContext(r.requestContext(), "POST", r.Cfg.OIDCBase+"/authentication_result", bytes.NewReader(authResultBody))
 	httputil.SetHeaders(req2, map[string]string{
 		"Accept":                 "application/json, text/plain, */*",
 		"Content-Type":           "application/json",
@@ -125,7 +125,7 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 	}
 
 	// 5. GET resumeURL1（不跟随）-> Location 含 authorizationResumptionContext
-	req3, _ := fhttp.NewRequest("GET", resumeURL1, nil)
+	req3, _ := fhttp.NewRequestWithContext(r.requestContext(), "GET", resumeURL1, nil)
 	httputil.SetHeaders(req3, navHeaders)
 	resp3, err := noRedirect.Do(req3)
 	if err != nil {
@@ -146,7 +146,7 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 		"authorizationResumptionContext": ctx,
 		"userSessionId":                  r.SSOToken,
 	})
-	req4, _ := fhttp.NewRequest("POST", r.Cfg.OIDCBase+"/device_authorization/associate_token", bytes.NewReader(consentBody))
+	req4, _ := fhttp.NewRequestWithContext(r.requestContext(), "POST", r.Cfg.OIDCBase+"/device_authorization/associate_token", bytes.NewReader(consentBody))
 	httputil.SetHeaders(req4, map[string]string{
 		"Accept":             "application/json, text/plain, */*",
 		"Content-Type":       "application/json",
@@ -177,7 +177,7 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 	}
 
 	// 7. GET resumeURL2（不跟随）-> Location 含 code
-	req5, _ := fhttp.NewRequest("GET", resumeURL2, nil)
+	req5, _ := fhttp.NewRequestWithContext(r.requestContext(), "GET", resumeURL2, nil)
 	httputil.SetHeaders(req5, navHeaders)
 	resp5, err := noRedirect.Do(req5)
 	if err != nil {

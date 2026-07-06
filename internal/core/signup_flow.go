@@ -300,14 +300,22 @@ func (r *Registrar) Step9SendOTP() error {
 func (r *Registrar) Step10GetOTP() (string, error) {
 	log.Println("[10] 等待验证码")
 	if r.Cfg.UseOutlook && r.Cfg.OutlookAccount != nil {
-		code, err := email.WaitForOTP(*r.Cfg.OutlookAccount, r.OutlookMailCount, 120, 5)
+		code, err := email.WaitForOTPContext(r.requestContext(), *r.Cfg.OutlookAccount, r.OutlookMailCount, 120, 5)
 		if err != nil {
 			return "", err
 		}
 		log.Printf("验证码: %s", code)
 		return code, nil
 	}
-	code, err := r.EmailSvc.WaitForCode(120, 3)
+	var (
+		code string
+		err  error
+	)
+	if svc, ok := r.EmailSvc.(email.ContextTempEmailService); ok {
+		code, err = svc.WaitForCodeContext(r.requestContext(), 120, 3)
+	} else {
+		code, err = r.EmailSvc.WaitForCode(120, 3)
+	}
 	if err != nil {
 		return "", err
 	}

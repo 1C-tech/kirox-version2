@@ -38,6 +38,10 @@ export function DeleteOutlookAccount(arg1) {
   return window['go']['main']['App']['DeleteOutlookAccount'](arg1);
 }
 
+export function DeleteOutlookAccounts(arg1) {
+  return window['go']['main']['App']['DeleteOutlookAccounts'](arg1);
+}
+
 export function DeleteProxyEntry(arg1) {
   return window['go']['main']['App']['DeleteProxyEntry'](arg1);
 }

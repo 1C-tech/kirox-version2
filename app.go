@@ -217,6 +217,10 @@ func (a *App) DeleteOutlookAccount(em string) map[string]interface{} {
 	return email.DeleteOutlookAccount(em)
 }
 
+func (a *App) DeleteOutlookAccounts(emailsJSON string) map[string]interface{} {
+	return email.DeleteOutlookAccounts(emailsJSON)
+}
+
 func (a *App) ClearOutlookAccounts() map[string]interface{} {
 	return email.ClearOutlookAccounts()
 }
@@ -393,13 +397,21 @@ func (a *App) CancelUpdate() map[string]interface{} {
 
 func accountFromMap(m map[string]interface{}) subscription.Account {
 	get := func(k string) string { v, _ := m[k].(string); return v }
+	getAny := func(keys ...string) string {
+		for _, k := range keys {
+			if v := get(k); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
 	return subscription.Account{
-		Email:        get("email"),
-		RefreshToken: get("refreshToken"),
-		ClientID:     get("clientId"),
-		ClientSecret: get("clientSecret"),
-		Region:       get("region"),
-		Provider:     get("provider"),
+		Email:        getAny("email"),
+		RefreshToken: getAny("awsRefreshToken", "refreshToken"),
+		ClientID:     getAny("awsClientId", "clientId"),
+		ClientSecret: getAny("awsClientSecret", "clientSecret"),
+		Region:       getAny("region"),
+		Provider:     getAny("provider", "login_provider"),
 		Time:         get("time"),
 		Subscription: get("subscription"),
 	}
@@ -434,19 +446,6 @@ func (a *App) ExportAccounts(accountsJSON string) map[string]interface{} {
 	return map[string]interface{}{
 		"accounts": results,
 		"errors":   errs,
-	}
-}
-
-// QuickExportAccounts 离线快速导出：零 API 调用，仅导出本地存储的账号基础信息。
-func (a *App) QuickExportAccounts(accountsJSON string) map[string]interface{} {
-	var inputs []core.ExportAccountInput
-	if err := json.Unmarshal([]byte(accountsJSON), &inputs); err != nil {
-		return map[string]interface{}{"error": "参数格式错误: " + err.Error()}
-	}
-	results := core.QuickExportAccounts(inputs)
-	return map[string]interface{}{
-		"accounts": results,
-		"errors":   []map[string]interface{}{},
 	}
 }
 

@@ -1,6 +1,7 @@
 package email
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,8 +27,8 @@ type MoeMailClient struct {
 
 // MoeMailSystemConfig 系统配置响应
 type MoeMailSystemConfig struct {
-	EmailDomains string `json:"emailDomains"` // 可用域名（逗号分隔字符串）
-	Domains      []string                      // 解析后的域名列表（不参与 JSON）
+	EmailDomains string   `json:"emailDomains"` // 可用域名（逗号分隔字符串）
+	Domains      []string // 解析后的域名列表（不参与 JSON）
 }
 
 // MoeMailEmail 邮箱信息
@@ -280,6 +281,11 @@ func (p *MoeMailProvider) GetAddress() string {
 
 // WaitForCode 轮询等待验证码
 func (p *MoeMailProvider) WaitForCode(timeout, interval int) (string, error) {
+	return p.WaitForCodeContext(context.Background(), timeout, interval)
+}
+
+// WaitForCodeContext 轮询等待验证码，支持任务取消
+func (p *MoeMailProvider) WaitForCodeContext(ctx context.Context, timeout, interval int) (string, error) {
 	maxRetries := timeout / interval
 	codeRegex := regexp.MustCompile(`\b(\d{6})\b`)
 
@@ -288,13 +294,18 @@ func (p *MoeMailProvider) WaitForCode(timeout, interval int) (string, error) {
 	log.Printf("[MoeMail] 开始等待验证码，初始邮件数: %d", beforeCount)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if ctx != nil && ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		// 获取邮件列表
 		messages, err := p.client.GetMessages(p.emailID, "")
 		if err != nil {
 			if attempt%5 == 0 {
 				log.Printf("[MoeMail] 获取邮件失败: %v, 重试中...", err)
 			}
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 
@@ -303,7 +314,9 @@ func (p *MoeMailProvider) WaitForCode(timeout, interval int) (string, error) {
 			if attempt%5 == 0 {
 				log.Printf("[MoeMail] [%d/%d] 暂无新邮件 (当前%d封)...", attempt, maxRetries, currentCount)
 			}
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 
@@ -336,7 +349,9 @@ func (p *MoeMailProvider) WaitForCode(timeout, interval int) (string, error) {
 		if attempt%5 == 0 {
 			log.Printf("[MoeMail] [%d/%d] 新邮件中未找到验证码...", attempt, maxRetries)
 		}
-		time.Sleep(time.Duration(interval) * time.Second)
+		if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+			return "", err
+		}
 	}
 
 	return "", fmt.Errorf("等待验证码超时 (%ds)", timeout)

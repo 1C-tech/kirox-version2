@@ -28,13 +28,13 @@ type StartTaskRequest struct {
 	MoeMailConfigs    map[string][]email.MoeMailConfig `json:"moemailConfigs"`    // 域名 -> 配置列表映射
 	MoeMailRandomMode bool                             `json:"moemailRandomMode"` // 是否为随机模式
 
-	CloudMailDomains    []string                            `json:"cloudmailDomains"`
-	CloudMailConfigs    map[string][]email.CloudMailConfig  `json:"cloudmailConfigs"`
-	CloudMailRandomMode bool                                `json:"cloudmailRandomMode"`
+	CloudMailDomains    []string                           `json:"cloudmailDomains"`
+	CloudMailConfigs    map[string][]email.CloudMailConfig `json:"cloudmailConfigs"`
+	CloudMailRandomMode bool                               `json:"cloudmailRandomMode"`
 
-	CFTempEmailDomains    []string                                `json:"cftempemailDomains"`
-	CFTempEmailConfigs    map[string][]email.CFTempEmailConfig    `json:"cftempemailConfigs"`
-	CFTempEmailRandomMode bool                                    `json:"cftempemailRandomMode"`
+	CFTempEmailDomains    []string                             `json:"cftempemailDomains"`
+	CFTempEmailConfigs    map[string][]email.CFTempEmailConfig `json:"cftempemailConfigs"`
+	CFTempEmailRandomMode bool                                 `json:"cftempemailRandomMode"`
 }
 
 // StartTask 公开方法（包装器）
@@ -472,6 +472,11 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 			reg.TaskLabel = fmt.Sprintf("%d/%d", i+1, req.Count)
 			result = reg.Run()
 
+			if taskCtx.Err() != nil {
+				log.Printf("[Kiro][%d/%d] 已取消", i+1, req.Count)
+				return
+			}
+
 			if result["status"] == "success" {
 				break
 			}
@@ -747,10 +752,10 @@ func isKillSwitchError(errorMsg string) bool {
 		return false
 	}
 	triggers := []string{
-		"send-otp 失败 (400)",     // Step9 原始 400
-		"注册被拦截",                // formatError 对 BLOCKED/注册请求被拦截 的翻译
-		"IP或浏览器指纹被检测",    // 指纹/IP 被标记
-		"BLOCKED",                  // 响应体里直接包含的风控标记
+		"send-otp 失败 (400)", // Step9 原始 400
+		"注册被拦截",             // formatError 对 BLOCKED/注册请求被拦截 的翻译
+		"IP或浏览器指纹被检测",       // 指纹/IP 被标记
+		"BLOCKED",           // 响应体里直接包含的风控标记
 		"注册请求被拦截",
 	}
 	for _, t := range triggers {

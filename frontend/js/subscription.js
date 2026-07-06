@@ -381,6 +381,64 @@ function copySubErrorDetail() {
   navigator.clipboard.writeText(text).then(function() { showToast(_subT('subscription.errCopied', '已复制错误详情')); });
 }
 
+function firstSubValue() {
+  for (var i = 0; i < arguments.length; i++) {
+    var v = arguments[i];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return '';
+}
+
+function numberSubValue() {
+  var v = firstSubValue.apply(null, arguments);
+  if (v === '') return 0;
+  var n = Number(v);
+  return isFinite(n) ? n : 0;
+}
+
+function normalizeKiroExportInput(raw, email) {
+  raw = raw || {};
+  var authRaw = raw.kiroAuthTokenRaw || raw.kiro_auth_token_raw || {};
+  var profileRaw = raw.kiroProfileRaw || raw.kiro_profile_raw || {};
+  var usageRaw = raw.kiroUsageRaw || raw.kiro_usage_raw || null;
+  var provider = firstSubValue(raw.provider, raw.loginProvider, raw.login_provider, authRaw.provider, authRaw.loginProvider, 'BuilderId');
+  var legacyAWSRefresh = firstSubValue(raw.awsRefreshToken, raw.refreshToken);
+
+  return {
+    email: firstSubValue(email, raw.email, authRaw.email, authRaw.loginHint, authRaw.login_hint),
+    refreshToken: firstSubValue(raw.refreshToken),
+    clientId: firstSubValue(raw.clientId),
+    clientSecret: firstSubValue(raw.clientSecret),
+    region: firstSubValue(raw.region, 'us-east-1'),
+    provider: provider,
+
+    awsRefreshToken: legacyAWSRefresh,
+    awsClientId: firstSubValue(raw.awsClientId, raw.clientId),
+    awsClientSecret: firstSubValue(raw.awsClientSecret, raw.clientSecret),
+
+    kiroAccessToken: firstSubValue(raw.kiroAccessToken, raw.access_token, authRaw.accessToken),
+    kiroRefreshToken: firstSubValue(raw.kiroRefreshToken, raw.refresh_token, authRaw.refreshToken),
+    kiroClientId: firstSubValue(raw.kiroClientId, raw.kiro_client_id),
+    kiroClientSecret: firstSubValue(raw.kiroClientSecret, raw.kiro_client_secret),
+    kiroTokenType: firstSubValue(raw.kiroTokenType, raw.token_type, authRaw.tokenType),
+    kiroExpiresAt: numberSubValue(raw.kiroExpiresAt, raw.expires_at),
+
+    userId: firstSubValue(raw.userId, raw.user_id, authRaw.userId, authRaw.user_id),
+    loginProvider: firstSubValue(raw.loginProvider, raw.login_provider, provider),
+    profileArn: firstSubValue(raw.profileArn, profileRaw.arn, authRaw.profileArn),
+    planName: firstSubValue(raw.planName, raw.plan_name),
+    planTier: firstSubValue(raw.planTier, raw.plan_tier),
+    creditsTotal: numberSubValue(raw.creditsTotal, raw.credits_total, raw.creditLimit),
+    creditsUsed: numberSubValue(raw.creditsUsed, raw.credits_used, raw.creditUsed),
+    usageResetAt: numberSubValue(raw.usageResetAt, raw.usage_reset_at),
+    createdAt: numberSubValue(raw.createdAt, raw.created_at),
+    lastUsed: numberSubValue(raw.lastUsed, raw.last_used),
+    kiroAuthTokenRaw: authRaw,
+    kiroProfileRaw: profileRaw,
+    kiroUsageRaw: usageRaw
+  };
+}
+
 // ===== 批量导出 Kiro JSON =====
 async function exportKiroAccountsWithSub() {
   // 优先导出选中的账号，否则导出全部
@@ -397,14 +455,7 @@ async function exportKiroAccountsWithSub() {
     var a = toExport[i];
     // 从 rawAccounts 中找匹配的原始数据
     var raw = (subState.rawAccounts || []).find(function(r) { return r.email === a.email; }) || {};
-    inputs.push({
-      email:       a.email || '',
-      refreshToken: raw.refreshToken || '',
-      clientId:     raw.clientId || '',
-      clientSecret: raw.clientSecret || '',
-      region:       raw.region || 'us-east-1',
-      provider:     raw.provider || 'BuilderId'
-    });
+    inputs.push(normalizeKiroExportInput(raw, a.email));
   }
 
   showToast(_subT('subscription.exporting', { n: inputs.length }, '正在导出 {n} 个账号，请稍候...'), 'info');
@@ -453,57 +504,6 @@ async function exportKiroAccountsWithSub() {
   } else {
     showToast(_subT('subscription.exportOk', { n: result.accounts.length, file: filename }, '已导出 {n} 个账号 → {file}'), 'success');
   }
-}
-
-// ===== 快速导出（离线，不调用任何API） =====
-async function quickExportKiroAccounts() {
-  var selected = subState.accounts.filter(function(a) { return a.selected; });
-  var toExport = selected.length > 0 ? selected : subState.accounts;
-  if (toExport.length === 0) {
-    showToast(_subT('subscription.noAccounts', '没有可导出的账号'), 'error');
-    return;
-  }
-
-  var inputs = [];
-  for (var i = 0; i < toExport.length; i++) {
-    var a = toExport[i];
-    var raw = (subState.rawAccounts || []).find(function(r) { return r.email === a.email; }) || {};
-    inputs.push({
-      email:       a.email || '',
-      refreshToken: raw.refreshToken || '',
-      clientId:     raw.clientId || '',
-      clientSecret: raw.clientSecret || '',
-      region:       raw.region || 'us-east-1',
-      provider:     raw.provider || 'BuilderId'
-    });
-  }
-
-  // 直接调用离线导出，无 API 调用，即时返回
-  var result = await window.go.main.App.QuickExportAccounts(JSON.stringify(inputs));
-  if (!result || !result.accounts || result.accounts.length === 0) {
-    showToast(_subT('subscription.exportFailed', '导出失败: 无数据'), 'error');
-    return;
-  }
-
-  var now = new Date();
-  var ts = now.getFullYear() +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0') + '_' +
-    String(now.getHours()).padStart(2, '0') +
-    String(now.getMinutes()).padStart(2, '0') +
-    String(now.getSeconds()).padStart(2, '0');
-  var filename = 'kiro_quick_export_' + ts + '.json';
-  var blob = new Blob([JSON.stringify(result.accounts, null, 2)], { type: 'application/json' });
-  var url = URL.createObjectURL(blob);
-  var aEl = document.createElement('a');
-  aEl.href = url;
-  aEl.download = filename;
-  document.body.appendChild(aEl);
-  aEl.click();
-  document.body.removeChild(aEl);
-  URL.revokeObjectURL(url);
-
-  showToast(_subT('subscription.exportOk', { n: result.accounts.length, file: filename }, '已快速导出 {n} 个账号 → {file}'), 'success');
 }
 
 // 语言切换后重新渲染动态内容（表格行、进度条文本）

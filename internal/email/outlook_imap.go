@@ -2,6 +2,7 @@ package email
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
@@ -372,8 +373,16 @@ func (c *imapClient) fetchLatestBody(seq int) (string, error) {
 
 // WaitForOTP 通过 IMAP 轮询等待 AWS 验证码
 func WaitForOTP(acc OutlookAccount, beforeCount, timeout, interval int) (string, error) {
+	return WaitForOTPContext(context.Background(), acc, beforeCount, timeout, interval)
+}
+
+// WaitForOTPContext 通过 IMAP 轮询等待 AWS 验证码，支持任务取消
+func WaitForOTPContext(ctx context.Context, acc OutlookAccount, beforeCount, timeout, interval int) (string, error) {
 	log.Printf("[Outlook IMAP] 等待验证码, 邮箱=%s, 发送前邮件数=%d", acc.Email, beforeCount)
 
+	if ctx != nil && ctx.Err() != nil {
+		return "", ctx.Err()
+	}
 	accessToken, err := RefreshOutlookToken(acc)
 	if err != nil {
 		return "", fmt.Errorf("刷新 Outlook Token 失败: %v", err)
@@ -384,19 +393,26 @@ func WaitForOTP(acc OutlookAccount, beforeCount, timeout, interval int) (string,
 	consecutiveSelectFail := 0
 	maxConsecutiveSelectFail := 3 // 连续 3 次 SELECT 失败则提前放弃，避免单账号卡住整批
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if ctx != nil && ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		client, err := newIMAPClient()
 		if err != nil {
 			if attempt%5 == 0 {
 				log.Printf("[Outlook IMAP] 连接失败: %v, 重试中...", err)
 			}
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 
 		if err := client.authenticate(acc.Email, accessToken); err != nil {
 			client.close()
 			accessToken, _ = RefreshOutlookToken(acc)
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 
@@ -409,7 +425,9 @@ func WaitForOTP(acc OutlookAccount, beforeCount, timeout, interval int) (string,
 				return "", fmt.Errorf("IMAP SELECT 连续失败 %d 次: %v", consecutiveSelectFail, err)
 			}
 			log.Printf("[Outlook IMAP] SELECT 失败 (%d/%d): %v", consecutiveSelectFail, maxConsecutiveSelectFail, err)
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 		consecutiveSelectFail = 0 // 成功则重置
@@ -419,7 +437,9 @@ func WaitForOTP(acc OutlookAccount, beforeCount, timeout, interval int) (string,
 			if attempt%5 == 0 {
 				log.Printf("[Outlook IMAP] [%d/%d] 暂无新邮件 (当前%d封)...", attempt, maxRetries, total)
 			}
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 
@@ -440,7 +460,9 @@ func WaitForOTP(acc OutlookAccount, beforeCount, timeout, interval int) (string,
 		if attempt%5 == 0 {
 			log.Printf("[Outlook IMAP] [%d/%d] 新邮件中未找到验证码...", attempt, maxRetries)
 		}
-		time.Sleep(time.Duration(interval) * time.Second)
+		if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+			return "", err
+		}
 	}
 	return "", fmt.Errorf("等待验证码超时 (%ds)", timeout)
 }

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,8 +26,9 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 		"clientSecret": r.ClientSecret,
 		"refreshToken": refreshToken,
 		"grantType":    "refresh_token",
+		"idc_region":   "us-east-1",
 	})
-	req, _ := fhttp.NewRequest("POST", "https://oidc.us-east-1.amazonaws.com/token",
+	req, _ := fhttp.NewRequestWithContext(r.requestContext(), "POST", "https://oidc.us-east-1.amazonaws.com/token",
 		bytes.NewReader(tokenBody))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
@@ -57,7 +59,7 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 		"grantType":    "refresh_token",
 		"idc_region":   "us-east-1",
 	})
-	kiroRes := queryPostEndpoint(client, "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", kiroRefreshBody)
+	kiroRes := queryPostEndpoint(r.requestContext(), client, "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", kiroRefreshBody)
 	if kiroRes.ok {
 		var kiroAuth map[string]interface{}
 		json.Unmarshal(kiroRes.body, &kiroAuth)
@@ -70,7 +72,7 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 	}
 
 	usageURL := fmt.Sprintf("https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST&isEmailRequired=true&profileArn=%s", url.QueryEscape(profileARN))
-	usageRes := queryGetEndpoint(client, access, usageURL)
+	usageRes := queryGetEndpoint(r.requestContext(), client, access, usageURL)
 	if usageRes.suspended {
 		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
 	}
@@ -78,12 +80,20 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 		return map[string]interface{}{"alive": false, "error": "usage query failed"}
 	}
 
-	modelRes := queryGetEndpoint(client, access, "https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR")
+	modelRes := queryGetEndpoint(r.requestContext(), client, access, "https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR")
 	if modelRes.suspended {
 		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
 	}
 
-	return r.parseUsage(usageRes.body)
+	parsed := r.parseUsage(usageRes.body)
+	if profileARN != "" {
+		parsed["profileArn"] = profileARN
+	}
+	var usageRaw map[string]interface{}
+	if err := json.Unmarshal(usageRes.body, &usageRaw); err == nil && usageRaw != nil {
+		parsed["usageRaw"] = usageRaw
+	}
+	return parsed
 }
 
 type endpointResult struct {
@@ -121,8 +131,13 @@ func endpointLabel(url string) string {
 	}
 }
 
-func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response, error) }, access, url string) endpointResult {
-	req, _ := fhttp.NewRequest("GET", url, nil)
+func queryGetEndpoint(ctx context.Context, client interface {
+	Do(req *fhttp.Request) (*fhttp.Response, error)
+}, access, url string) endpointResult {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, _ := fhttp.NewRequestWithContext(ctx, "GET", url, nil)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+access)
 	req.Header.Set("User-Agent", "aws-sdk-js/1.0.18 ua/2.1 os/windows lang/js md/nodejs#20.16.0 api/codewhispererstreaming#1.0.18 m/E KiroIDE-0.6.18")
@@ -137,8 +152,13 @@ func queryGetEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response,
 	return checkEndpointResponse(url, resp.StatusCode, body)
 }
 
-func queryPostEndpoint(client interface{ Do(req *fhttp.Request) (*fhttp.Response, error) }, url string, payload []byte) endpointResult {
-	req, _ := fhttp.NewRequest("POST", url, bytes.NewReader(payload))
+func queryPostEndpoint(ctx context.Context, client interface {
+	Do(req *fhttp.Request) (*fhttp.Response, error)
+}, url string, payload []byte) endpointResult {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, _ := fhttp.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
@@ -200,5 +220,3 @@ func (r *Registrar) parseUsage(body []byte) map[string]interface{} {
 		"credit_used": totalUsed, "credit_limit": totalLimit,
 	}
 }
-
-

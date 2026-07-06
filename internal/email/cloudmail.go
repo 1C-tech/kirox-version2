@@ -2,6 +2,7 @@ package email
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -364,6 +365,11 @@ func (p *CloudMailProvider) GetAddress() string { return p.address }
 
 // WaitForCode 轮询等待 6 位数字验证码
 func (p *CloudMailProvider) WaitForCode(timeout, interval int) (string, error) {
+	return p.WaitForCodeContext(context.Background(), timeout, interval)
+}
+
+// WaitForCodeContext 轮询等待 6 位数字验证码，支持任务取消
+func (p *CloudMailProvider) WaitForCodeContext(ctx context.Context, timeout, interval int) (string, error) {
 	if interval <= 0 {
 		interval = 3
 	}
@@ -375,12 +381,17 @@ func (p *CloudMailProvider) WaitForCode(timeout, interval int) (string, error) {
 	log.Printf("[CloudMail] 开始等待验证码 %s，基线 emailId=%d", p.address, p.initialMaxEmailID)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if ctx != nil && ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		msgs, err := p.client.EmailList(p.address, 20)
 		if err != nil {
 			if attempt%5 == 0 {
 				log.Printf("[CloudMail] 获取邮件失败: %v，重试中...", err)
 			}
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 
@@ -405,7 +416,9 @@ func (p *CloudMailProvider) WaitForCode(timeout, interval int) (string, error) {
 		if attempt%5 == 0 {
 			log.Printf("[CloudMail] [%d/%d] 暂无新邮件...", attempt, maxRetries)
 		}
-		time.Sleep(time.Duration(interval) * time.Second)
+		if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+			return "", err
+		}
 	}
 
 	return "", fmt.Errorf("等待验证码超时 (%ds)", timeout)

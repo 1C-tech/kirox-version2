@@ -3,6 +3,7 @@
 var outlookCurrentPage = 1;
 var outlookPageSize = 10;
 var outlookAllAccounts = [];
+var outlookSelectedEmails = {};
 
 function _accT(key, varsOrFallback, fallbackMaybe) {
   var vars = null, fallback = null;
@@ -25,6 +26,17 @@ function _accT(key, varsOrFallback, fallbackMaybe) {
     return fallback;
   }
   return key;
+}
+
+function escapeAccountHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function quoteAccountArg(s) {
+  return String(s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 function openAddOutlookModal() {
@@ -82,6 +94,13 @@ async function loadOutlookAccountsList() {
   try {
     var accounts = await window.go.main.App.GetOutlookAccounts();
     outlookAllAccounts = accounts || [];
+    var existing = {};
+    outlookAllAccounts.forEach(function(a) {
+      if (a && a.email) existing[a.email] = true;
+    });
+    Object.keys(outlookSelectedEmails).forEach(function(email) {
+      if (!existing[email]) delete outlookSelectedEmails[email];
+    });
     renderOutlookPage();
   } catch(e) {
     console.error('加载账号列表失败:', e);
@@ -109,15 +128,17 @@ function renderOutlookPage() {
     var html = '';
     pageAccounts.forEach(function(acc, i) {
       var globalIdx = start + i;
+      var email = acc.email || '';
       var status = acc.registered
         ? (acc.success ? _accT('status.success', '成功') : _accT('status.failed', '失败'))
         : _accT('status.unregistered', '未注册');
       var statusColor = acc.registered ? (acc.success ? 'var(--success)' : 'var(--danger)') : 'var(--text-muted)';
       var addedTime = acc.addedAt ? acc.addedAt.substring(5, 16) : '-';
-      html += '<tr><td>' + (globalIdx+1) + '</td><td>' + acc.email + '</td>';
+      html += '<tr><td style="padding:10px 16px;"><input type="checkbox" data-outlook-email="' + escapeAccountHtml(email) + '" ' + (outlookSelectedEmails[email] ? 'checked' : '') + ' onchange="toggleOutlookRowSelection(\'' + quoteAccountArg(email) + '\', this.checked)"></td>';
+      html += '<td>' + (globalIdx+1) + '</td><td>' + escapeAccountHtml(email) + '</td>';
       html += '<td style="color:' + statusColor + ';font-weight:600;">' + status + '</td>';
       html += '<td style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">' + addedTime + '</td>';
-      html += '<td style="text-align:right;"><a href="javascript:void(0)" onclick="deleteOutlookAccount(\'' + acc.email + '\')" style="color:var(--danger);">' + _accT('common.delete', '删除') + '</a></td></tr>';
+      html += '<td style="text-align:right;"><a href="javascript:void(0)" onclick="deleteOutlookAccount(\'' + quoteAccountArg(email) + '\')" style="color:var(--danger);">' + _accT('common.delete', '删除') + '</a></td></tr>';
     });
     tbody.innerHTML = html;
 
@@ -130,9 +151,10 @@ function renderOutlookPage() {
       pager.style.display = 'none';
     }
   } else {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px;">' + _accT('accounts.emptyRow', '暂无邮箱账号') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:20px;">' + _accT('accounts.emptyRow', '暂无邮箱账号') + '</td></tr>';
     pager.style.display = 'none';
   }
+  refreshOutlookSelectionControls();
 }
 
 function changeOutlookPage(delta) {
@@ -153,7 +175,84 @@ async function deleteOutlookAccount(email) {
           showToast(result.error, 'error');
           return;
         }
+        delete outlookSelectedEmails[email];
         showToast(_accT('accounts.deletedOne', '账号已删除'));
+        await loadOutlookAccountsList();
+      } catch(e) {
+        showToast(_accT('toast.deleteFailed', '删除失败') + ': ' + e.message, 'error');
+      }
+    }
+  );
+}
+
+function getCurrentOutlookPageAccounts() {
+  var accounts = outlookAllAccounts || [];
+  var totalPages = Math.ceil(accounts.length / outlookPageSize);
+  if (totalPages > 0 && outlookCurrentPage > totalPages) outlookCurrentPage = totalPages;
+  if (outlookCurrentPage < 1) outlookCurrentPage = 1;
+  var start = (outlookCurrentPage - 1) * outlookPageSize;
+  var end = Math.min(start + outlookPageSize, accounts.length);
+  return accounts.slice(start, end);
+}
+
+function getSelectedOutlookEmails() {
+  return Object.keys(outlookSelectedEmails).filter(function(email) { return outlookSelectedEmails[email]; });
+}
+
+function refreshOutlookSelectionControls() {
+  var selected = getSelectedOutlookEmails();
+  var btn = document.getElementById('outlook-delete-selected');
+  if (btn) {
+    btn.disabled = selected.length === 0;
+    btn.textContent = selected.length
+      ? _accT('accounts.deleteSelectedCount', { n: selected.length }, '批量删除 ({n})')
+      : _accT('accounts.deleteSelected', '批量删除');
+  }
+
+  var pageChk = document.getElementById('outlook-select-page');
+  if (!pageChk) return;
+  var pageAccounts = getCurrentOutlookPageAccounts().filter(function(a) { return a && a.email; });
+  var checked = pageAccounts.filter(function(a) { return outlookSelectedEmails[a.email]; }).length;
+  pageChk.checked = pageAccounts.length > 0 && checked === pageAccounts.length;
+  pageChk.indeterminate = checked > 0 && checked < pageAccounts.length;
+  pageChk.disabled = pageAccounts.length === 0;
+}
+
+function toggleOutlookRowSelection(email, checked) {
+  if (!email) return;
+  if (checked) outlookSelectedEmails[email] = true;
+  else delete outlookSelectedEmails[email];
+  refreshOutlookSelectionControls();
+}
+
+function toggleOutlookPageSelection(checked) {
+  getCurrentOutlookPageAccounts().forEach(function(a) {
+    if (!a || !a.email) return;
+    if (checked) outlookSelectedEmails[a.email] = true;
+    else delete outlookSelectedEmails[a.email];
+  });
+  renderOutlookPage();
+}
+
+function deleteSelectedOutlookAccounts() {
+  var selected = getSelectedOutlookEmails();
+  if (!selected.length) {
+    showToast(_accT('accounts.noSelected', '请先勾选要删除的账号'), 'error');
+    return;
+  }
+  showConfirmModal(
+    _accT('accounts.deleteSelectedTitle', '批量删除账号'),
+    _accT('accounts.deleteSelectedMsg', { n: selected.length }, '确认删除选中的 {n} 个账号？此操作不可恢复。'),
+    _accT('accounts.deleteConfirm', '确认删除'),
+    async function() {
+      try {
+        var result = await window.go.main.App.DeleteOutlookAccounts(JSON.stringify(selected));
+        if (result.error) {
+          showToast(result.error, 'error');
+          return;
+        }
+        outlookSelectedEmails = {};
+        showToast(_accT('toast.accountsDeleted', { n: (result.removed || 0) }, '已删除 {n} 个账号'));
         await loadOutlookAccountsList();
       } catch(e) {
         showToast(_accT('toast.deleteFailed', '删除失败') + ': ' + e.message, 'error');
@@ -174,6 +273,7 @@ function clearAllOutlookAccounts() {
           showToast(result.error, 'error');
           return;
         }
+        outlookSelectedEmails = {};
         showToast(_accT('accounts.allCleared', '已清空所有账号'));
         await loadOutlookAccountsList();
       } catch(e) {
@@ -200,6 +300,7 @@ function clearRegisteredOutlookAccounts() {
           showToast(result.error, 'error');
           return;
         }
+        outlookSelectedEmails = {};
         showToast(_accT('toast.accountsDeleted', { n: (result.removed || 0) }, '已删除 {n} 个账号'));
         await loadOutlookAccountsList();
       } catch(e) {

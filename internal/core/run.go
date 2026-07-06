@@ -108,7 +108,6 @@ func (r *Registrar) formatError(step string, err error) string {
 	return friendlyStep + "失败: " + errMsg
 }
 
-
 // ctxCancelled 检查 context 是否已取消
 func (r *Registrar) ctxCancelled() bool {
 	return r.Ctx != nil && r.Ctx.Err() != nil
@@ -253,7 +252,9 @@ func (r *Registrar) Run() map[string]interface{} {
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			log.Printf("%s [13] 重试获取登录凭证 (%d/3)", prefix, attempt)
-			time.Sleep(2 * time.Second)
+			if err := r.sleepOrCanceled(2 * time.Second); err != nil {
+				return map[string]interface{}{"status": "failed", "error": "任务已取消", "email": r.Email, "passwordSet": true}
+			}
 		}
 		var err error
 		awsToken, err = r.Step13SSOToken()
@@ -275,7 +276,9 @@ func (r *Registrar) Run() map[string]interface{} {
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			log.Printf("%s [14] 重试授权Kiro访问 (%d/3)", prefix, attempt)
-			time.Sleep(2 * time.Second)
+			if err := r.sleepOrCanceled(2 * time.Second); err != nil {
+				return map[string]interface{}{"status": "failed", "error": "任务已取消", "email": r.Email, "passwordSet": true}
+			}
 		}
 		var err error
 		kiroCode, err = r.Step14KiroAuthorize()
@@ -293,7 +296,9 @@ func (r *Registrar) Run() map[string]interface{} {
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			log.Printf("%s [15] 重试获取访问令牌 (%d/3)", prefix, attempt)
-			time.Sleep(2 * time.Second)
+			if err := r.sleepOrCanceled(2 * time.Second); err != nil {
+				return map[string]interface{}{"status": "failed", "error": "任务已取消", "email": r.Email, "passwordSet": true}
+			}
 		}
 		var err error
 		kiroTokens, err = r.Step15KiroExchange(kiroCode)
@@ -308,6 +313,26 @@ func (r *Registrar) Run() map[string]interface{} {
 	}
 
 	verify := r.VerifyAlive(awsToken)
+	if kiroTokens != nil {
+		if _, ok := kiroTokens["email"]; !ok {
+			kiroTokens["email"] = r.Email
+		}
+		if _, ok := kiroTokens["loginHint"]; !ok {
+			kiroTokens["loginHint"] = r.Email
+		}
+		if _, ok := kiroTokens["login_hint"]; !ok {
+			kiroTokens["login_hint"] = r.Email
+		}
+		if _, ok := kiroTokens["provider"]; !ok {
+			kiroTokens["provider"] = "BuilderId"
+		}
+		if _, ok := kiroTokens["loginProvider"]; !ok {
+			kiroTokens["loginProvider"] = "BuilderId"
+		}
+		if arn, _ := verify["profileArn"].(string); arn != "" {
+			kiroTokens["profileArn"] = arn
+		}
+	}
 	if suspended, _ := verify["suspended"].(bool); suspended {
 		log.Printf("%s 账号已被封禁", prefix)
 		return map[string]interface{}{"status": "failed", "error": "suspended", "email": r.Email, "passwordSet": true}
@@ -321,15 +346,17 @@ func (r *Registrar) Run() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"email":         r.Email,
-		"password":      r.Cfg.Password,
-		"status":        "success",
-		"passwordSet":   true,
-		"client_id":     r.ClientID,
-		"client_secret": r.ClientSecret,
-		"device_code":   r.DeviceCode,
-		"aws_token":     awsToken,
-		"kiro_tokens":   kiroTokens,
-		"verify":        verify,
+		"email":              r.Email,
+		"password":           r.Cfg.Password,
+		"status":             "success",
+		"passwordSet":        true,
+		"client_id":          r.ClientID,
+		"client_secret":      r.ClientSecret,
+		"kiro_client_id":     r.KiroClientID,
+		"kiro_client_secret": r.KiroClientSecret,
+		"device_code":        r.DeviceCode,
+		"aws_token":          awsToken,
+		"kiro_tokens":        kiroTokens,
+		"verify":             verify,
 	}
 }

@@ -1,6 +1,7 @@
 package email
 
 import (
+	"encoding/json"
 	"os"
 	"time"
 
@@ -114,6 +115,51 @@ func DeleteOutlookAccount(email string) map[string]interface{} {
 	return map[string]interface{}{
 		"status": "deleted",
 		"total":  newLen,
+	}
+}
+
+// DeleteOutlookAccounts 批量删除 Outlook 账号（纯内存操作，异步刷盘）
+func DeleteOutlookAccounts(emailsJSON string) map[string]interface{} {
+	var emails []string
+	if err := json.Unmarshal([]byte(emailsJSON), &emails); err != nil {
+		return map[string]interface{}{"error": "参数格式错误: " + err.Error()}
+	}
+	if len(emails) == 0 {
+		return map[string]interface{}{"error": "未选择账号"}
+	}
+
+	targets := make(map[string]struct{}, len(emails))
+	for _, email := range emails {
+		if email != "" {
+			targets[email] = struct{}{}
+		}
+	}
+	if len(targets) == 0 {
+		return map[string]interface{}{"error": "未选择账号"}
+	}
+
+	removed := 0
+	newLen := 0
+	storage.ModifyAccountsCached(func(accounts []map[string]interface{}) []map[string]interface{} {
+		newAccounts := make([]map[string]interface{}, 0, len(accounts))
+		for _, acc := range accounts {
+			email, _ := acc["email"].(string)
+			if _, ok := targets[email]; ok {
+				removed++
+				continue
+			}
+			newAccounts = append(newAccounts, acc)
+		}
+		newLen = len(newAccounts)
+		return newAccounts
+	})
+	if removed == 0 {
+		return map[string]interface{}{"error": "未找到要删除的账号"}
+	}
+	return map[string]interface{}{
+		"status":  "deleted",
+		"removed": removed,
+		"total":   newLen,
 	}
 }
 

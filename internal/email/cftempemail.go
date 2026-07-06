@@ -3,6 +3,7 @@ package email
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -303,11 +304,11 @@ func (c *CFTempEmailClient) TestConnection() ([]string, error) {
 
 // CFTempEmailProvider CF 临时邮箱提供商
 type CFTempEmailProvider struct {
-	client             *CFTempEmailClient
-	address            string
-	jwt                string
-	processedMsgIDs    map[int64]bool
-	processedMsgIDsMu  sync.Mutex
+	client            *CFTempEmailClient
+	address           string
+	jwt               string
+	processedMsgIDs   map[int64]bool
+	processedMsgIDsMu sync.Mutex
 }
 
 // NewCFTempEmailProvider 创建一个 CF 临时邮箱（调用 Worker admin API）
@@ -342,6 +343,11 @@ func (p *CFTempEmailProvider) GetAddress() string { return p.address }
 
 // WaitForCode 轮询等待 6 位数字验证码
 func (p *CFTempEmailProvider) WaitForCode(timeout, interval int) (string, error) {
+	return p.WaitForCodeContext(context.Background(), timeout, interval)
+}
+
+// WaitForCodeContext 轮询等待 6 位数字验证码，支持任务取消
+func (p *CFTempEmailProvider) WaitForCodeContext(ctx context.Context, timeout, interval int) (string, error) {
 	if interval <= 0 {
 		interval = 3
 	}
@@ -353,6 +359,9 @@ func (p *CFTempEmailProvider) WaitForCode(timeout, interval int) (string, error)
 	log.Printf("[CFTempEmail] 开始等待验证码 %s", p.address)
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if ctx != nil && ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		// 优先使用 JWT，降级使用 admin auth
 		var msgs []cfTempEmailMessage
 		var err error
@@ -369,7 +378,9 @@ func (p *CFTempEmailProvider) WaitForCode(timeout, interval int) (string, error)
 			if attempt%5 == 0 {
 				log.Printf("[CFTempEmail] 获取邮件失败: %v，重试中...", err)
 			}
-			time.Sleep(time.Duration(interval) * time.Second)
+			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+				return "", err
+			}
 			continue
 		}
 
@@ -395,7 +406,9 @@ func (p *CFTempEmailProvider) WaitForCode(timeout, interval int) (string, error)
 		if attempt%5 == 0 {
 			log.Printf("[CFTempEmail] [%d/%d] 暂无新邮件...", attempt, maxRetries)
 		}
-		time.Sleep(time.Duration(interval) * time.Second)
+		if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
+			return "", err
+		}
 	}
 
 	return "", fmt.Errorf("等待验证码超时 (%ds)", timeout)

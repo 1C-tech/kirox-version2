@@ -82,6 +82,7 @@ func RefreshAccessToken(acc Account) (string, error) {
 		"clientSecret": acc.ClientSecret,
 		"refreshToken": acc.RefreshToken,
 		"grantType":    "refresh_token",
+		"idc_region":   idcRegion(acc.Region),
 	})
 	client := httputil.NewTLSClient("", true)
 	req, _ := fhttp.NewRequest("POST", oidcEndpoint(acc.Region), bytes.NewReader(body))
@@ -214,6 +215,14 @@ func SetOverage(acc Account, accessToken string, enabled bool) error {
 		return fmt.Errorf("HTTP %d: %s", code, truncate(string(body), 1000))
 	}
 	return nil
+}
+
+// idcRegion 根据 OIDC region 推导 Identity Center 区域代码
+func idcRegion(region string) string {
+	if region != "" && strings.HasPrefix(region, "eu-") {
+		return "eu-central-1"
+	}
+	return "us-east-1"
 }
 
 func truncate(s string, n int) string {

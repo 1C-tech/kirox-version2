@@ -1,7 +1,9 @@
 package email
 
 import (
+	"context"
 	"log"
+	"time"
 )
 
 // TempEmailService 临时邮箱服务接口
@@ -16,10 +18,29 @@ type TempEmailService interface {
 	GetAddress() string
 }
 
+// ContextTempEmailService 支持任务停止时中断等待验证码。
+type ContextTempEmailService interface {
+	TempEmailService
+	WaitForCodeContext(ctx context.Context, timeoutSec, intervalSec int) (string, error)
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	if ctx == nil {
+		time.Sleep(d)
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(d):
+		return nil
+	}
+}
+
 // moEmailAdapter 适配器，将 MoeMailProvider 包装为 TempEmailService
 type moEmailAdapter struct {
-	baseURL string
-	apiKey  string
+	baseURL  string
+	apiKey   string
 	provider *MoeMailProvider
 }
 
@@ -77,6 +98,13 @@ func (a *moEmailAdapter) WaitForCode(timeout, interval int) (string, error) {
 	return a.provider.WaitForCode(timeout, interval)
 }
 
+func (a *moEmailAdapter) WaitForCodeContext(ctx context.Context, timeout, interval int) (string, error) {
+	if a.provider == nil {
+		return "", nil
+	}
+	return a.provider.WaitForCodeContext(ctx, timeout, interval)
+}
+
 // GetAddress 获取邮箱地址
 func (a *moEmailAdapter) GetAddress() string {
 	if a.provider == nil {
@@ -111,6 +139,13 @@ func (a *cfTempEmailAdapter) WaitForCode(timeout, interval int) (string, error) 
 	return a.provider.WaitForCode(timeout, interval)
 }
 
+func (a *cfTempEmailAdapter) WaitForCodeContext(ctx context.Context, timeout, interval int) (string, error) {
+	if a.provider == nil {
+		return "", nil
+	}
+	return a.provider.WaitForCodeContext(ctx, timeout, interval)
+}
+
 // GetAddress 获取邮箱地址
 func (a *cfTempEmailAdapter) GetAddress() string {
 	if a.provider == nil {
@@ -143,6 +178,13 @@ func (a *cloudMailAdapter) WaitForCode(timeout, interval int) (string, error) {
 		return "", nil
 	}
 	return a.provider.WaitForCode(timeout, interval)
+}
+
+func (a *cloudMailAdapter) WaitForCodeContext(ctx context.Context, timeout, interval int) (string, error) {
+	if a.provider == nil {
+		return "", nil
+	}
+	return a.provider.WaitForCodeContext(ctx, timeout, interval)
 }
 
 // GetAddress 获取邮箱地址

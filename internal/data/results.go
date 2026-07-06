@@ -24,20 +24,54 @@ func SaveKiroSuccess(result map[string]interface{}, outDir string) error {
 	if at == nil {
 		at = map[string]interface{}{}
 	}
+	kiroTokens, _ := result["kiro_tokens"].(map[string]interface{})
+	if kiroTokens == nil {
+		kiroTokens = map[string]interface{}{}
+	}
 	verify, _ := result["verify"].(map[string]interface{})
 	item := map[string]interface{}{
-		"refreshToken": at["refreshToken"],
-		"provider":     "BuilderId",
-		"clientId":     result["client_id"],
-		"clientSecret": result["client_secret"],
-		"region":       "us-east-1",
-		"email":        emailAddr,
-		"time":         time.Now().Format("2006-01-02 15:04:05"),
+		"refreshToken":    at["refreshToken"],
+		"awsRefreshToken": at["refreshToken"],
+		"awsClientId":     result["client_id"],
+		"awsClientSecret": result["client_secret"],
+		"provider":        "BuilderId",
+		"clientId":        result["client_id"],
+		"clientSecret":    result["client_secret"],
+		"region":          "us-east-1",
+		"email":           emailAddr,
+		"time":            time.Now().Format("2006-01-02 15:04:05"),
+	}
+	if rt, _ := kiroTokens["refreshToken"].(string); rt != "" {
+		item["kiroRefreshToken"] = rt
+	}
+	if at, _ := kiroTokens["accessToken"].(string); at != "" {
+		item["kiroAccessToken"] = at
+	}
+	if tt, _ := kiroTokens["tokenType"].(string); tt != "" {
+		item["kiroTokenType"] = tt
+	}
+	if ei, ok := kiroTokens["expiresIn"]; ok {
+		item["kiroExpiresIn"] = ei
+	}
+	if v := result["kiro_client_id"]; v != nil {
+		item["kiroClientId"] = v
+	}
+	if v := result["kiro_client_secret"]; v != nil {
+		item["kiroClientSecret"] = v
+	}
+	if len(kiroTokens) > 0 {
+		item["kiroAuthTokenRaw"] = kiroTokens
 	}
 	if verify != nil {
 		item["creditUsed"] = verify["credit_used"]
 		item["creditLimit"] = verify["credit_limit"]
 		item["subscription"] = verify["subscription"]
+		if arn, _ := verify["profileArn"].(string); arn != "" {
+			item["profileArn"] = arn
+		}
+		if raw, ok := verify["usageRaw"].(map[string]interface{}); ok && raw != nil {
+			item["kiroUsageRaw"] = raw
+		}
 	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {

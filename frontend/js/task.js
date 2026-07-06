@@ -231,7 +231,9 @@ async function stopTask() {
       showToast(result.error, 'error'); 
       return; 
     }
-    document.getElementById('btn-stop').disabled = true;
+    document.querySelectorAll('#btn-stop').forEach(function(btn) {
+      btn.disabled = true;
+    });
     showToast(_tkT('toast.taskStopping', '正在停止任务...'));
   } catch(e) {
     showToast(_tkT('toast.taskStopFailed', '停止失败') + ': ' + (e.message || e), 'error');
