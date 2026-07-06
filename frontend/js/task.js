@@ -55,7 +55,9 @@ function _formatLogLine(line) {
   // 整行级别判定 —— 用原始中文判定，避免翻译后关键字缺失
   var low = raw.toLowerCase();
   var cls = 'log-line';
-  if (raw.indexOf('注册成功') >= 0 || raw.indexOf('已验活') >= 0 || raw.indexOf('[OK]') >= 0) {
+  if (raw.indexOf('[DEBUG]') >= 0) {
+    cls += ' log-line-debug';
+  } else if (raw.indexOf('注册成功') >= 0 || raw.indexOf('已验活') >= 0 || raw.indexOf('[OK]') >= 0) {
     cls += ' log-line-success';
   } else if (raw.indexOf('失败') >= 0 || raw.indexOf('错误') >= 0 || raw.indexOf('异常') >= 0 ||
              raw.indexOf('被拦截') >= 0 || raw.indexOf('被封') >= 0 ||
@@ -63,8 +65,6 @@ function _formatLogLine(line) {
     cls += ' log-line-error';
   } else if (raw.indexOf('⚠') >= 0 || raw.indexOf('熔断') >= 0 || raw.indexOf('重试') >= 0) {
     cls += ' log-line-warn';
-  } else if (raw.indexOf('[DEBUG]') >= 0) {
-    cls += ' log-line-debug';
   }
 
   // 翻译为当前语言（zh 直接返回原文）

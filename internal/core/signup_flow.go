@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -287,6 +288,17 @@ func (r *Registrar) Step9SendOTP() error {
 		return err
 	}
 	if status != 200 {
+		log.Printf("[DEBUG][send-otp] status=%d body_len=%d body=%s", status, len(respBody), compactDebugBody(respBody, 800))
+		log.Printf("[DEBUG][send-otp] email_domain=%s workflowState=%s workflowID=%s visitorId=%s ubid=%s fp_len=%d timeSpentOnPage=%s cookies=%s",
+			emailDomain(r.Email),
+			shortDebugID(r.WorkflowState, 24),
+			shortDebugID(r.WorkflowID, 24),
+			shortDebugID(r.VisitorID, 16),
+			shortDebugID(r.Ubid, 16),
+			len(fp),
+			tsp,
+			strings.Join(profileCookieKeys(r.Cookies), ","),
+		)
 		if r.Cfg.Debug {
 			log.Printf("[DEBUG] send-otp 失败: status=%d, body=%s, fp_len=%d", status, string(respBody), len(fp))
 		}
@@ -294,6 +306,61 @@ func (r *Registrar) Step9SendOTP() error {
 	}
 	log.Println("验证码已发送")
 	return nil
+}
+
+func compactDebugBody(body []byte, limit int) string {
+	s := strings.TrimSpace(string(body))
+	s = scrubURLs(s)
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '\r', '\n', '\t':
+			return ' '
+		default:
+			if r < 32 {
+				return -1
+			}
+			return r
+		}
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+	if limit > 0 && len(s) > limit {
+		return s[:limit] + "...(truncated)"
+	}
+	if s == "" {
+		return "<empty>"
+	}
+	return s
+}
+
+func shortDebugID(value string, keep int) string {
+	if value == "" {
+		return "-"
+	}
+	if keep <= 0 || len(value) <= keep {
+		return value
+	}
+	return value[:keep] + "..."
+}
+
+func emailDomain(addr string) string {
+	if idx := strings.LastIndex(addr, "@"); idx >= 0 && idx+1 < len(addr) {
+		return addr[idx+1:]
+	}
+	return "-"
+}
+
+func profileCookieKeys(cookies map[string]string) []string {
+	keys := make([]string, 0, 5)
+	for _, key := range []string{"awsccc", "aws-user-profile-ubid", "i18next", "awsd2c-token", "awsd2c-token-c"} {
+		if _, ok := cookies[key]; ok {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	if len(keys) == 0 {
+		return []string{"none"}
+	}
+	return keys
 }
 
 // Step10GetOTP 等待验证码 (临时邮箱或 Outlook IMAP)
