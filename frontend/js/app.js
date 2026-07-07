@@ -37,6 +37,9 @@ function switchPage(pageId) {
   }
   if (pageId === 'subscription') {
     reloadSubscriptionAccounts();
+    startSubAutoRefresh();
+  } else {
+    stopSubAutoRefresh();
   }
 }
 

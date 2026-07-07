@@ -540,3 +540,19 @@ window.addEventListener('i18n:changed', function() {
     if (typeof updateSubProgress === 'function') updateSubProgress();
   } catch (e) {}
 });
+
+// ===== 自动刷新订阅列表 =====
+var subRefreshTimer = null;
+
+function startSubAutoRefresh() {
+  stopSubAutoRefresh();
+  // 立即加载一次（switchPage 已调用 reloadSubscriptionAccounts，这里仅保底）
+  subRefreshTimer = setInterval(reloadSubscriptionAccounts, 3000);
+}
+
+function stopSubAutoRefresh() {
+  if (subRefreshTimer) {
+    clearInterval(subRefreshTimer);
+    subRefreshTimer = null;
+  }
+}

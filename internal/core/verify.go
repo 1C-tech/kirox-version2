@@ -15,7 +15,8 @@ import (
 )
 
 // VerifyAlive 验活: 刷新 Token + 查用量 + 查模型
-func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]interface{} {
+// kiroTokens 为 Step15 Kiro ExchangeToken 返回的 accessToken/refreshToken，优先用于查用量。
+func (r *Registrar) VerifyAlive(awsToken map[string]interface{}, kiroTokens map[string]interface{}) map[string]interface{} {
 	log.Println("[验活] 刷新 Token + 查用量 + 查模型")
 	client := httputil.NewTLSClient(r.Cfg.Proxy, true, r.Identity.ChromeVer)
 
@@ -34,55 +35,101 @@ func (r *Registrar) VerifyAlive(awsToken map[string]interface{}) map[string]inte
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("验活异常: %v", err)
-		return map[string]interface{}{"alive": false, "error": err.Error()}
+		return map[string]interface{}{"alive": false, "error": err.Error(), "subscription": "Free", "credit_used": 0, "credit_limit": 0}
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		log.Printf("Token 刷新失败: %d", resp.StatusCode)
-		return map[string]interface{}{"alive": false, "error": fmt.Sprintf("refresh failed: %d", resp.StatusCode)}
+		return map[string]interface{}{"alive": false, "error": fmt.Sprintf("refresh failed: %d", resp.StatusCode), "subscription": "Free", "credit_used": 0, "credit_limit": 0}
 	}
 
 	var tok map[string]interface{}
 	json.Unmarshal(body, &tok)
-	access, _ := tok["accessToken"].(string)
+	awsAccess, _ := tok["accessToken"].(string)
 	expiresIn, _ := tok["expiresIn"].(float64)
 	log.Printf("Token 刷新成功, expiresIn=%ds", int(expiresIn))
 
-	// 先调用 Kiro refreshToken 获取 profileArn
+	// 优先用 Kiro token（Step15 ExchangeToken 产物）获取 profileArn 和查用量
+	kiroAccess, _ := kiroTokens["accessToken"].(string)
+	kiroRefresh, _ := kiroTokens["refreshToken"].(string)
+
 	profileARN := ""
-	kiroRefreshBody, _ := json.Marshal(map[string]string{
-		"clientId":     r.ClientID,
-		"clientSecret": r.ClientSecret,
-		"refreshToken": refreshToken,
-		"grantType":    "refresh_token",
-		"idc_region":   "us-east-1",
-	})
-	kiroRes := queryPostEndpoint(r.requestContext(), client, "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", kiroRefreshBody)
-	if kiroRes.ok {
-		var kiroAuth map[string]interface{}
-		json.Unmarshal(kiroRes.body, &kiroAuth)
-		if arn, ok := kiroAuth["profileArn"].(string); ok && arn != "" {
-			profileARN = arn
+	// 用 Kiro 凭据调用 Kiro refreshToken 获取 profileArn
+	if kiroRefresh != "" && r.KiroClientID != "" {
+		kiroRefreshBody, _ := json.Marshal(map[string]string{
+			"clientId":     r.KiroClientID,
+			"clientSecret": r.KiroClientSecret,
+			"refreshToken": kiroRefresh,
+			"grantType":    "refresh_token",
+			"idc_region":   "us-east-1",
+		})
+		kiroRes := queryPostEndpoint(r.requestContext(), client, "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", kiroRefreshBody)
+		if kiroRes.suspended {
+			return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended", "subscription": "Free", "credit_used": 0, "credit_limit": 0}
+		}
+		if kiroRes.ok {
+			var kiroAuth map[string]interface{}
+			json.Unmarshal(kiroRes.body, &kiroAuth)
+			if arn, ok := kiroAuth["profileArn"].(string); ok && arn != "" {
+				profileARN = arn
+			}
+		} else {
+			log.Printf("Kiro refreshToken 失败 (status 非200)，使用 fallback profileArn")
 		}
 	}
-	if kiroRes.suspended {
-		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
+	// fallback: 用 AWS token 再试一次
+	if profileARN == "" {
+		awsKiroBody, _ := json.Marshal(map[string]string{
+			"clientId":     r.ClientID,
+			"clientSecret": r.ClientSecret,
+			"refreshToken": refreshToken,
+			"grantType":    "refresh_token",
+			"idc_region":   "us-east-1",
+		})
+		awsKiroRes := queryPostEndpoint(r.requestContext(), client, "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken", awsKiroBody)
+		if awsKiroRes.suspended {
+			return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended", "subscription": "Free", "credit_used": 0, "credit_limit": 0}
+		}
+		if awsKiroRes.ok {
+			var kiroAuth map[string]interface{}
+			json.Unmarshal(awsKiroRes.body, &kiroAuth)
+			if arn, ok := kiroAuth["profileArn"].(string); ok && arn != "" {
+				profileARN = arn
+			}
+		}
+	}
+	// 最终 fallback: 使用已知的默认 profileArn
+	if profileARN == "" {
+		profileARN = "arn:aws:codewhisperer:us-east-1:638616132270:profile/AAAACCCCXXXX"
+		log.Printf("使用 fallback profileArn 查询 usage")
 	}
 
+	// 查用量：优先用 Kiro accessToken
+	access := kiroAccess
+	if access == "" {
+		access = awsAccess
+	}
 	usageURL := fmt.Sprintf("https://q.us-east-1.amazonaws.com/getUsageLimits?origin=AI_EDITOR&resourceType=AGENTIC_REQUEST&isEmailRequired=true&profileArn=%s", url.QueryEscape(profileARN))
 	usageRes := queryGetEndpoint(r.requestContext(), client, access, usageURL)
 	if usageRes.suspended {
-		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
+		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended", "subscription": "Free", "credit_used": 0, "credit_limit": 0}
 	}
 	if !usageRes.ok {
-		return map[string]interface{}{"alive": false, "error": "usage query failed"}
+		// usage 查询失败时仍尝试解析已有数据
+		parsed := map[string]interface{}{
+			"alive":        false,
+			"error":        "usage query failed",
+			"profileArn":   profileARN,
+			"subscription": "Free",
+		}
+		return parsed
 	}
 
 	modelRes := queryGetEndpoint(r.requestContext(), client, access, "https://q.us-east-1.amazonaws.com/ListAvailableModels?origin=AI_EDITOR")
 	if modelRes.suspended {
-		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended"}
+		return map[string]interface{}{"alive": false, "suspended": true, "error": "suspended", "subscription": "Free", "credit_used": 0, "credit_limit": 0}
 	}
 
 	parsed := r.parseUsage(usageRes.body)

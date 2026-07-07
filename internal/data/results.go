@@ -63,15 +63,33 @@ func SaveKiroSuccess(result map[string]interface{}, outDir string) error {
 		item["kiroAuthTokenRaw"] = kiroTokens
 	}
 	if verify != nil {
-		item["creditUsed"] = verify["credit_used"]
-		item["creditLimit"] = verify["credit_limit"]
-		item["subscription"] = verify["subscription"]
+		// subscription: 优先用 API 返回的真实值，为空时兜底 "Free"
+		sub, _ := verify["subscription"].(string)
+		if sub == "" {
+			sub = "Free"
+		}
+		item["subscription"] = sub
+		// creditUsed / creditLimit: nil 时兜底 0，避免 JSON null 导致服务器导入报错
+		if cu := verify["credit_used"]; cu != nil {
+			item["creditUsed"] = cu
+		} else {
+			item["creditUsed"] = 0
+		}
+		if cl := verify["credit_limit"]; cl != nil {
+			item["creditLimit"] = cl
+		} else {
+			item["creditLimit"] = 0
+		}
 		if arn, _ := verify["profileArn"].(string); arn != "" {
 			item["profileArn"] = arn
 		}
 		if raw, ok := verify["usageRaw"].(map[string]interface{}); ok && raw != nil {
 			item["kiroUsageRaw"] = raw
 		}
+	} else {
+		item["subscription"] = "Free"
+		item["creditUsed"] = 0
+		item["creditLimit"] = 0
 	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {

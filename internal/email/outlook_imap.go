@@ -20,14 +20,6 @@ import (
 	"reg_go/internal/storage"
 )
 
-// OutlookAccount Outlook 邮箱账号
-type OutlookAccount struct {
-	Email        string
-	Password     string
-	ClientID     string
-	RefreshToken string
-}
-
 // ParseOutlookCSV 解析 outlook.csv
 func ParseOutlookCSV(path string) ([]OutlookAccount, error) {
 	data, err := os.ReadFile(path)
@@ -371,19 +363,32 @@ func (c *imapClient) fetchLatestBody(seq int) (string, error) {
 	return raw, nil
 }
 
-// WaitForOTP 通过 IMAP 轮询等待 AWS 验证码
+// WaitForOTP 轮询等待 AWS 验证码（双协议：优先 Graph，失败降级 IMAP）
 func WaitForOTP(acc OutlookAccount, beforeCount, timeout, interval int) (string, error) {
 	return WaitForOTPContext(context.Background(), acc, beforeCount, timeout, interval)
 }
 
-// WaitForOTPContext 通过 IMAP 轮询等待 AWS 验证码，支持任务取消
+// WaitForOTPContext 轮询等待 AWS 验证码，支持任务取消（双协议：优先 Graph，失败降级 IMAP）
 func WaitForOTPContext(ctx context.Context, acc OutlookAccount, beforeCount, timeout, interval int) (string, error) {
-	log.Printf("[Outlook IMAP] 等待验证码, 邮箱=%s, 发送前邮件数=%d", acc.Email, beforeCount)
-
 	if ctx != nil && ctx.Err() != nil {
 		return "", ctx.Err()
 	}
-	accessToken, err := RefreshOutlookToken(acc)
+
+	// 优先尝试 Graph API
+	log.Printf("[Outlook] 尝试 Graph API 等待验证码, 邮箱=%s", acc.Email)
+	code, err := waitForOTPGraph(ctx, acc, beforeCount, timeout, interval)
+	if err == nil {
+		return code, nil
+	}
+	log.Printf("[Outlook] Graph API 失败 (%v), 降级到 IMAP", err)
+
+	// Graph 失败，降级 IMAP
+	log.Printf("[Outlook IMAP] 等待验证码, 邮箱=%s, 发送前邮件数=%d", acc.Email, beforeCount)
+	// 重置 TokenType 让 IMAP 走自己的 scope
+	imapAcc := acc
+	imapAcc.TokenType = TokenTypeUnknown
+
+	accessToken, err := RefreshOutlookToken(imapAcc)
 	if err != nil {
 		return "", fmt.Errorf("刷新 Outlook Token 失败: %v", err)
 	}
@@ -391,7 +396,7 @@ func WaitForOTPContext(ctx context.Context, acc OutlookAccount, beforeCount, tim
 	codeRegex := regexp.MustCompile(`\b(\d{6})\b`)
 	maxRetries := timeout / interval
 	consecutiveSelectFail := 0
-	maxConsecutiveSelectFail := 3 // 连续 3 次 SELECT 失败则提前放弃，避免单账号卡住整批
+	maxConsecutiveSelectFail := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		if ctx != nil && ctx.Err() != nil {
 			return "", ctx.Err()
@@ -409,7 +414,7 @@ func WaitForOTPContext(ctx context.Context, acc OutlookAccount, beforeCount, tim
 
 		if err := client.authenticate(acc.Email, accessToken); err != nil {
 			client.close()
-			accessToken, _ = RefreshOutlookToken(acc)
+			accessToken, _ = RefreshOutlookToken(imapAcc)
 			if err := sleepWithContext(ctx, time.Duration(interval)*time.Second); err != nil {
 				return "", err
 			}
@@ -430,7 +435,7 @@ func WaitForOTPContext(ctx context.Context, acc OutlookAccount, beforeCount, tim
 			}
 			continue
 		}
-		consecutiveSelectFail = 0 // 成功则重置
+		consecutiveSelectFail = 0
 
 		if total <= beforeCount {
 			client.close()
@@ -467,9 +472,22 @@ func WaitForOTPContext(ctx context.Context, acc OutlookAccount, beforeCount, tim
 	return "", fmt.Errorf("等待验证码超时 (%ds)", timeout)
 }
 
-// GetInboxCount 获取收件箱当前邮件数量（带完整重连重试）
+// GetInboxCount 获取收件箱当前邮件数量（双协议：优先 Graph，失败降级 IMAP）
 func GetInboxCount(acc OutlookAccount) (int, error) {
-	accessToken, err := RefreshOutlookToken(acc)
+	// 优先尝试 Graph API
+	log.Printf("[Outlook] 尝试 Graph API 获取邮件数量")
+	count, err := getInboxCountGraph(acc)
+	if err == nil {
+		log.Printf("[Outlook Graph] 当前邮件数: %d", count)
+		return count, nil
+	}
+	log.Printf("[Outlook] Graph API 获取邮件数量失败 (%v), 降级到 IMAP", err)
+
+	// Graph 失败，降级 IMAP
+	imapAcc := acc
+	imapAcc.TokenType = TokenTypeUnknown
+
+	accessToken, err := RefreshOutlookToken(imapAcc)
 	if err != nil {
 		return 0, fmt.Errorf("刷新 Outlook Token 失败: %v", err)
 	}

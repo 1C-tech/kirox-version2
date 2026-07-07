@@ -358,10 +358,70 @@ func (p *MoeMailProvider) WaitForCodeContext(ctx context.Context, timeout, inter
 }
 
 // extractCodeFromText 从文本中提取验证码
+// 优先匹配 OTP 关键词附近的 6 位数字，并过滤 555555 等假码
 func extractCodeFromText(text string, regex *regexp.Regexp) string {
-	matches := regex.FindStringSubmatch(text)
-	if len(matches) > 1 {
-		return matches[1]
+	// 常见假码黑名单
+	fakeCodes := map[string]bool{
+		"000000": true, "111111": true, "123456": true,
+		"555555": true, "666666": true, "777777": true,
+		"888888": true, "999999": true,
 	}
-	return ""
+
+	// OTP 上下文关键词（匹配前后的文本线索）
+	contextKeys := []string{
+		"verification cod", "verification", "verify",
+		"your cod", "confirmation cod", "confirm",
+		"one-time", "otp", "security cod",
+		"enter this", "enter the", "is:",
+		"验证码", "验证", "确认码",
+	}
+
+	// 找所有 6 位数字及其前后上下文
+	type candidate struct {
+		code    string
+		idx     int
+		nearKey bool
+	}
+	var candidates []candidate
+	allMatches := regex.FindAllStringSubmatch(text, -1)
+	allIdxs := regex.FindAllStringIndex(text, -1)
+
+	for i, m := range allMatches {
+		if len(m) < 2 {
+			continue
+		}
+		code := m[1]
+		if fakeCodes[code] {
+			continue
+		}
+		var start, end int
+		if i < len(allIdxs) {
+			start = max(0, allIdxs[i][0]-40)
+			end = min(len(text), allIdxs[i][1]+40)
+		}
+		ctx := strings.ToLower(text[start:end])
+
+		nearKey := false
+		for _, k := range contextKeys {
+			if strings.Contains(ctx, k) {
+				nearKey = true
+				break
+			}
+		}
+		candidates = append(candidates, candidate{code: code, idx: allIdxs[i][0], nearKey: nearKey})
+	}
+
+	if len(candidates) == 0 {
+		return ""
+	}
+
+	// 优先返回有关键词上下文的候选码
+	for _, c := range candidates {
+		if c.nearKey {
+			return c.code
+		}
+	}
+
+	// 没有上下文匹配，取第一个非假码
+	return candidates[0].code
 }

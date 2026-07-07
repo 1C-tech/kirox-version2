@@ -312,7 +312,7 @@ func (r *Registrar) Run() map[string]interface{} {
 		}
 	}
 
-	verify := r.VerifyAlive(awsToken)
+	verify := r.VerifyAlive(awsToken, kiroTokens)
 	if kiroTokens != nil {
 		if _, ok := kiroTokens["email"]; !ok {
 			kiroTokens["email"] = r.Email
