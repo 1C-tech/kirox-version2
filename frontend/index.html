@@ -465,6 +465,72 @@
           </div>
         </div>
 
+        <!-- 反检测 -->
+        <div class="card" style="margin-bottom:20px;">
+          <div class="settings-group">
+            <div class="settings-group-title" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>反检测设置</span>
+              <button onclick="saveAntiDetectConfig()" class="btn btn-dark btn-sm">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span>保存配置</span>
+              </button>
+            </div>
+
+            <!-- Clash 配置 -->
+            <div class="settings-item">
+              <div class="settings-item-main">
+                <div class="settings-item-title">Clash 代理轮换</div>
+                <div class="settings-item-desc">通过 Clash API 自动切换可用出口节点</div>
+              </div>
+              <div class="settings-item-action" style="flex-direction:column;gap:8px;">
+                <div style="display:flex;align-items:center;gap:12px;width:100%;">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="cfg-clash-enable">
+                    启用 Clash
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="cfg-clash-fastest">
+                    优选模式
+                  </label>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;">
+                  <input type="text" id="cfg-clash-api" placeholder="API URL (http://127.0.0.1:49544)" class="form-input">
+                  <input type="text" id="cfg-clash-secret" placeholder="Secret" class="form-input">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;width:100%;">
+                  <input type="text" id="cfg-clash-group" placeholder='策略组名 (默认 "节点选择")' class="form-input">
+                  <input type="number" id="cfg-clash-mixed-port" placeholder="mixed-port (默认 7890)" class="form-input">
+                  <input type="text" id="cfg-clash-blacklist" placeholder='黑名单 (逗号分隔, 如 港,HK,台,TW)' class="form-input">
+                </div>
+              </div>
+            </div>
+
+            <!-- 其他反检测开关 -->
+            <div class="settings-item">
+              <div class="settings-item-main">
+                <div class="settings-item-title">附加检测</div>
+                <div class="settings-item-desc">IP 预检、指纹刷新、追踪头注入</div>
+              </div>
+              <div class="settings-item-action">
+                <div style="display:flex;flex-wrap:wrap;gap:12px;">
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="cfg-ip-precheck">
+                    IP 预检 (拦截 CN/HK)
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="cfg-fingerprint-refresh">
+                    每账号刷新 TLS 指纹
+                  </label>
+                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">
+                    <input type="checkbox" id="cfg-trace-headers">
+                    注入追踪头
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 

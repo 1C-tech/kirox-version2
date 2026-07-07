@@ -45,6 +45,30 @@ type Config struct {
 
 	MoEmailBaseURL string
 	MoEmailAPIKey  string
+
+	// 反检测配置（所有配置默认关闭，零配置向后兼容）
+	ClashConfig     *ClashConfig     `json:"clash_config,omitempty"`
+	AntiDetect      *AntiDetectConfig `json:"anti_detect,omitempty"`
+}
+
+// ClashConfig Clash 代理轮换配置
+type ClashConfig struct {
+	Enable      bool     `json:"enable"`
+	FastestMode bool     `json:"fastest_mode"`
+	APIURL      string   `json:"api_url"`       // 例如 http://127.0.0.1:9097
+	Secret      string   `json:"secret"`
+	GroupName   string   `json:"group_name"`    // 默认 "节点选择"
+	MixedPort   int      `json:"mixed_port"`    // Clash mixed-port，>=1 时跳过 /configs API 查询
+	Blacklist   []string `json:"blacklist"`
+	TestProxyURL string  `json:"test_proxy_url"` // 测活用代理 URL
+}
+
+// AntiDetectConfig 反检测功能配置
+type AntiDetectConfig struct {
+	EnableTraceHeaders            bool `json:"enable_trace_headers"`
+	RefreshFingerprintPerAccount  bool `json:"refresh_fingerprint_per_account"`
+	EnableIPPrecheck              bool `json:"enable_ip_precheck"`
+	EnableClashRotation           bool `json:"enable_clash_rotation"`
 }
 
 // NewConfig 创建默认配置
@@ -61,6 +85,7 @@ func NewConfig() *Config {
 		KiroRedirectURI: "https://app.kiro.dev/signin/oauth",
 		Password:        GenPassword(),
 		FullName:        "Test User",
+		// 反检测模块默认 nil，零配置向后兼容
 	}
 }
 

@@ -288,6 +288,76 @@ async function resetProxy() {
   }
 }
 
+// ===== 反检测配置 =====
+window.antiDetectConfig = null;
+
+function loadAntiDetectConfig() {
+  try {
+    var saved = localStorage.getItem('kiro-antidetect-config');
+    if (saved) {
+      window.antiDetectConfig = JSON.parse(saved);
+    } else {
+      // 默认值
+      window.antiDetectConfig = {
+        clash_enable: false,
+        clash_fastest: false,
+        clash_api: 'http://127.0.0.1:49544',
+        clash_secret: '',
+        clash_group: '节点选择',
+        clash_mixed_port: 7890,
+        clash_blacklist: [],
+        ip_precheck: false,
+        fingerprint_refresh: false,
+        trace_headers: false
+      };
+    }
+  } catch(e) {
+    window.antiDetectConfig = null;
+  }
+  // 同步到 DOM（设置页）
+  syncAntiDetectToDOM();
+}
+
+function syncAntiDetectToDOM() {
+  var cfg = window.antiDetectConfig;
+  if (!cfg) return;
+  var id = function(id) { return document.getElementById(id); };
+  var el;
+  if ((el = id('cfg-clash-enable'))) el.checked = !!cfg.clash_enable;
+  if ((el = id('cfg-clash-fastest'))) el.checked = !!cfg.clash_fastest;
+  if ((el = id('cfg-clash-api'))) el.value = cfg.clash_api || '';
+  if ((el = id('cfg-clash-secret'))) el.value = cfg.clash_secret || '';
+  if ((el = id('cfg-clash-group'))) el.value = cfg.clash_group || '节点选择';
+  if ((el = id('cfg-clash-mixed-port'))) el.value = cfg.clash_mixed_port || 7890;
+  if ((el = id('cfg-clash-blacklist'))) el.value = (cfg.clash_blacklist || []).join(', ');
+  if ((el = id('cfg-ip-precheck'))) el.checked = !!cfg.ip_precheck;
+  if ((el = id('cfg-fingerprint-refresh'))) el.checked = !!cfg.fingerprint_refresh;
+  if ((el = id('cfg-trace-headers'))) el.checked = !!cfg.trace_headers;
+}
+
+function saveAntiDetectConfig() {
+  try {
+    var cfg = {
+      clash_enable: document.getElementById('cfg-clash-enable').checked,
+      clash_fastest: document.getElementById('cfg-clash-fastest').checked,
+      clash_api: document.getElementById('cfg-clash-api').value.trim() || 'http://127.0.0.1:49544',
+      clash_secret: document.getElementById('cfg-clash-secret').value.trim() || '',
+      clash_group: document.getElementById('cfg-clash-group').value.trim() || '节点选择',
+      clash_mixed_port: parseInt(document.getElementById('cfg-clash-mixed-port').value) || 7890,
+      clash_blacklist: (document.getElementById('cfg-clash-blacklist').value.trim() || '')
+        .split(/[,，]/).map(function(s){return s.trim();}).filter(function(s){return s;}),
+      ip_precheck: document.getElementById('cfg-ip-precheck').checked,
+      fingerprint_refresh: document.getElementById('cfg-fingerprint-refresh').checked,
+      trace_headers: document.getElementById('cfg-trace-headers').checked
+    };
+    window.antiDetectConfig = cfg;
+    localStorage.setItem('kiro-antidetect-config', JSON.stringify(cfg));
+    showToast('反检测配置已保存');
+  } catch(e) {
+    showToast('保存反检测配置失败: ' + e.message, 'error');
+  }
+}
+
 // UI 状态
 function updateUIStatus(running) {
   document.querySelectorAll('#btn-start').forEach(function(btn) {
@@ -300,11 +370,35 @@ function updateUIStatus(running) {
 
 // 配置读写
 function getFormConfig() {
+  // 反检测配置 - 从已保存的全局变量读取（用户在设置页配置并保存）
+  var ad = window.antiDetectConfig;
+  var clashEnable = ad ? ad.clash_enable : false;
+  var clashConfig = null;
+  if (clashEnable && ad) {
+    clashConfig = {
+      enable: true,
+      fastest_mode: ad.clash_fastest,
+      api_url: ad.clash_api || 'http://127.0.0.1:49544',
+      secret: ad.clash_secret || '',
+      group_name: ad.clash_group || '节点选择',
+      mixed_port: ad.clash_mixed_port || 7890,
+      blacklist: ad.clash_blacklist || []
+    };
+  }
+  var antiDetect = {
+    enable_trace_headers: ad ? ad.trace_headers : false,
+    refresh_fingerprint_per_account: ad ? ad.fingerprint_refresh : false,
+    enable_ip_precheck: ad ? ad.ip_precheck : false,
+    enable_clash_rotation: clashEnable
+  };
+
   const config = {
     count: parseInt(document.getElementById('cfg-count').value) || 1,
     concurrency: parseInt(document.getElementById('cfg-concurrency').value) || 1,
     delay: parseInt(document.getElementById('cfg-delay').value) || 3,
-    emailProvider: selectedEmailProvider || 'outlook'
+    emailProvider: selectedEmailProvider || 'outlook',
+    clash_config: clashConfig,
+    anti_detect: antiDetect
   };
 
   // 如果选择了 MoeMail，添加域名信息和前缀配置
@@ -489,6 +583,7 @@ async function loadConfig() {
   loadDataDir();
   loadResultOutputDir();
   loadProxy();
+  loadAntiDetectConfig();
   if (typeof loadProxyPool === 'function') loadProxyPool();
   startOverviewTimer();
   console.log('[启动] 初始化完成');

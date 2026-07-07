@@ -64,9 +64,16 @@ type Registrar struct {
 
 // NewRegistrar 创建注册器
 func NewRegistrar(cfg *Config) *Registrar {
-	// 按代理绑定稳定指纹：同一出口 IP 下短时间内重复使用同一硬件身份，
-	// 只有 lsubid 前缀 / webpackHash 等真实浏览器会话间也会变的字段每次刷新。
-	identity := browser.IdentityForProxy(cfg.Proxy)
+	// 每账号刷新指纹：如果开启则每次生成全新身份，否则按代理绑定稳定指纹
+	var identity *browser.BrowserIdentity
+	if cfg.AntiDetect != nil && cfg.AntiDetect.RefreshFingerprintPerAccount {
+		identity = browser.RandomIdentity()
+		log.Printf("[指纹] 每账号刷新模式 - Chrome: %s | GPU: %s", identity.ChromeVer, identity.GPUModel)
+	} else {
+		// 按代理绑定稳定指纹：同一出口 IP 下短时间内重复使用同一硬件身份，
+		// 只有 lsubid 前缀 / webpackHash 等真实浏览器会话间也会变的字段每次刷新。
+		identity = browser.IdentityForProxy(cfg.Proxy)
+	}
 	log.Printf("[指纹] Chrome: %s | GPU: %s | 内存: %dGB | 核心: %d | 分辨率: %dx%d (%d-bit)",
 		identity.ChromeVer, identity.GPUModel, identity.DeviceMemory, identity.HardwareConcurrency,
 		identity.Screen.Width, identity.Screen.Height, identity.Screen.ColorDepth)
@@ -161,8 +168,10 @@ func (r *Registrar) DoPost(url string, payload interface{}, headers map[string]s
 			return nil, nil, err
 		}
 		httputil.SetHeaders(req, headers)
-		for k, v := range httputil.TraceHeaders() {
-			req.Header.Set(k, v)
+		if r.Cfg.AntiDetect != nil && r.Cfg.AntiDetect.EnableTraceHeaders {
+			for k, v := range httputil.TraceHeaders() {
+				req.Header.Set(k, v)
+			}
 		}
 		resp, err := r.Client.Do(req)
 		if err != nil {
@@ -200,8 +209,10 @@ func (r *Registrar) DoGet(url string, headers map[string]string) ([]byte, int, m
 			return nil, 0, nil, err
 		}
 		httputil.SetHeaders(req, headers)
-		for k, v := range httputil.TraceHeaders() {
-			req.Header.Set(k, v)
+		if r.Cfg.AntiDetect != nil && r.Cfg.AntiDetect.EnableTraceHeaders {
+			for k, v := range httputil.TraceHeaders() {
+				req.Header.Set(k, v)
+			}
 		}
 		resp, err := r.Client.Do(req)
 		if err != nil {
@@ -247,8 +258,10 @@ func (r *Registrar) DoPostRaw(url string, payload interface{}, headers map[strin
 			return nil, 0, nil, err
 		}
 		httputil.SetHeaders(req, headers)
-		for k, v := range httputil.TraceHeaders() {
-			req.Header.Set(k, v)
+		if r.Cfg.AntiDetect != nil && r.Cfg.AntiDetect.EnableTraceHeaders {
+			for k, v := range httputil.TraceHeaders() {
+				req.Header.Set(k, v)
+			}
 		}
 		resp, err := r.Client.Do(req)
 		if err != nil {

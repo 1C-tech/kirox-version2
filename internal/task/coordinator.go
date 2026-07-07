@@ -35,6 +35,9 @@ type StartTaskRequest struct {
 	CFTempEmailDomains    []string                             `json:"cftempemailDomains"`
 	CFTempEmailConfigs    map[string][]email.CFTempEmailConfig `json:"cftempemailConfigs"`
 	CFTempEmailRandomMode bool                                 `json:"cftempemailRandomMode"`
+
+	ClashConfig *core.ClashConfig     `json:"clash_config"`
+	AntiDetect  *core.AntiDetectConfig `json:"anti_detect"`
 }
 
 // StartTask 公开方法（包装器）
@@ -203,6 +206,12 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 	taskConfig.Proxy = storage.GetProxy()
 	if taskConfig.Proxy != "" {
 		log.Printf("[Kiro] 已启用代理")
+	}
+	if req.ClashConfig != nil {
+		taskConfig.ClashConfig = req.ClashConfig
+	}
+	if req.AntiDetect != nil {
+		taskConfig.AntiDetect = req.AntiDetect
 	}
 
 	// 预先准备 MoeMail 域名池
@@ -439,6 +448,32 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 			cfgCopy := config
 			taskCfg.CFTempEmailConfig = &cfgCopy
 			currentEmail = provider.GetAddress()
+		}
+
+		// ===== 反检测：代理轮换 + IP 预检 =====
+		// 参考 CPA: utils/proxy_manager.py _do_smart_switch() + register.py L53-67
+		if taskCfg.ClashConfig != nil && taskCfg.ClashConfig.Enable {
+			rotator := proxy.NewClashRotator(
+				taskCfg.ClashConfig.APIURL,
+				taskCfg.ClashConfig.Secret,
+				taskCfg.ClashConfig.GroupName,
+				taskCfg.ClashConfig.MixedPort,
+				taskCfg.ClashConfig.Blacklist,
+				taskCfg.ClashConfig.FastestMode,
+			)
+			if newProxy, err := rotator.SwitchNode(taskCfg.Proxy); err != nil {
+				log.Printf("[Kiro][%d/%d] Clash 切换节点失败: %v (使用当前代理)", i+1, req.Count, err)
+			} else {
+				taskCfg.Proxy = newProxy
+				log.Printf("[Kiro][%d/%d] Clash 切换节点新代理: %s", i+1, req.Count, newProxy)
+			}
+		}
+
+		// IP 预检：注册前检查代理地区（日志警告，不阻塞）
+		if taskCfg.AntiDetect != nil && taskCfg.AntiDetect.EnableIPPrecheck {
+			if err := proxy.PreCheckProxy(taskCfg.Proxy); err != nil {
+				log.Printf("[Kiro][%d/%d] 代理预检: %v (继续注册)", i+1, req.Count, err)
+			}
 		}
 
 		log.Printf("[Kiro][%d/%d] 开始注册", i+1, req.Count)

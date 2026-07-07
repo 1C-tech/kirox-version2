@@ -73,12 +73,61 @@ func PKCE() (verifier, challenge string) {
 	return
 }
 
+// resolveProfile 根据 Chrome 主版本号映射 TLS profile
+func resolveProfile(majorVer int) profiles.ClientProfile {
+	// tls-client profiles 映射表
+	// 可用 profiles:
+	//   Chrome_103/104/105/106/107/108/109/110/111/112
+	//   Chrome_116_PSK(特殊) Chrome_117
+	//   Chrome_120 Chrome_124
+	//   Chrome_130_PSK(特殊) Chrome_131 Chrome_131_PSK
+	//   Chrome_133 Chrome_133_PSK
+	//   Chrome_144 Chrome_144_PSK
+	//   Chrome_146 Chrome_146_PSK
+	switch {
+	case majorVer >= 146:
+		return profiles.Chrome_146
+	case majorVer >= 144:
+		return profiles.Chrome_144
+	case majorVer >= 133:
+		return profiles.Chrome_133
+	case majorVer >= 131:
+		return profiles.Chrome_131
+	case majorVer >= 124:
+		return profiles.Chrome_124
+	case majorVer >= 120:
+		return profiles.Chrome_120
+	case majorVer >= 117:
+		return profiles.Chrome_117
+	default:
+		return profiles.Chrome_112
+	}
+}
+
+// parseChromeMajorVer 从 chromeVer 字符串中解析主版本号
+// 支持格式: "144", "144.0.0.0", "137.0.0.0"
+func parseChromeMajorVer(chromeVer string) int {
+	if chromeVer == "" {
+		return 144
+	}
+	parts := strings.SplitN(chromeVer, ".", 2)
+	major, err := strconv.Atoi(parts[0])
+	if err != nil || major < 100 {
+		return 144
+	}
+	return major
+}
+
 // NewTLSClient 创建带 TLS 指纹伪装的 HTTP 客户端
-// chromeVer 可选，忽略（始终使用 Chrome_144 profile）
+// chromeVer 可选，指定 Chrome 主版本号（如 "144"、"137.0.0.0"），省略时默认 Chrome_144
 func NewTLSClient(proxy string, followRedirect bool, chromeVer ...string) tls_client.HttpClient {
+	ver := 144
+	if len(chromeVer) > 0 && chromeVer[0] != "" {
+		ver = parseChromeMajorVer(chromeVer[0])
+	}
 	opts := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(60),
-		tls_client.WithClientProfile(profiles.Chrome_144),
+		tls_client.WithClientProfile(resolveProfile(ver)),
 		tls_client.WithInsecureSkipVerify(),
 	}
 	if !followRedirect {

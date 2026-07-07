@@ -1,3 +1,52 @@
+export namespace core {
+	
+	export class AntiDetectConfig {
+	    enable_trace_headers: boolean;
+	    refresh_fingerprint_per_account: boolean;
+	    enable_ip_precheck: boolean;
+	    enable_clash_rotation: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AntiDetectConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enable_trace_headers = source["enable_trace_headers"];
+	        this.refresh_fingerprint_per_account = source["refresh_fingerprint_per_account"];
+	        this.enable_ip_precheck = source["enable_ip_precheck"];
+	        this.enable_clash_rotation = source["enable_clash_rotation"];
+	    }
+	}
+	export class ClashConfig {
+	    enable: boolean;
+	    fastest_mode: boolean;
+	    api_url: string;
+	    secret: string;
+	    group_name: string;
+	    mixed_port: number;
+	    blacklist: string[];
+	    test_proxy_url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ClashConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enable = source["enable"];
+	        this.fastest_mode = source["fastest_mode"];
+	        this.api_url = source["api_url"];
+	        this.secret = source["secret"];
+	        this.group_name = source["group_name"];
+	        this.mixed_port = source["mixed_port"];
+	        this.blacklist = source["blacklist"];
+	        this.test_proxy_url = source["test_proxy_url"];
+	    }
+	}
+
+}
+
 export namespace email {
 	
 	export class CFTempEmailConfig {
@@ -125,6 +174,8 @@ export namespace task {
 	    cftempemailDomains: string[];
 	    cftempemailConfigs: Record<string, Array<email.CFTempEmailConfig>>;
 	    cftempemailRandomMode: boolean;
+	    clash_config?: core.ClashConfig;
+	    anti_detect?: core.AntiDetectConfig;
 	
 	    static createFrom(source: any = {}) {
 	        return new StartTaskRequest(source);
@@ -146,6 +197,8 @@ export namespace task {
 	        this.cftempemailDomains = source["cftempemailDomains"];
 	        this.cftempemailConfigs = this.convertValues(source["cftempemailConfigs"], Array<email.CFTempEmailConfig>, true);
 	        this.cftempemailRandomMode = source["cftempemailRandomMode"];
+	        this.clash_config = this.convertValues(source["clash_config"], core.ClashConfig);
+	        this.anti_detect = this.convertValues(source["anti_detect"], core.AntiDetectConfig);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
