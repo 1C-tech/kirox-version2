@@ -71,6 +71,9 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 	}
 	req1, _ := fhttp.NewRequestWithContext(r.requestContext(), "GET", authURL, nil)
 	httputil.SetHeaders(req1, navHeaders)
+	for k, v := range httputil.TraceHeaders() {
+		req1.Header.Set(k, v)
+	}
 	resp1, err := noRedirect.Do(req1)
 	if err != nil {
 		return "", err
@@ -107,6 +110,9 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 		"sec-fetch-mode":         "cors",
 		"sec-fetch-site":         "cross-site",
 	})
+	for k, v := range httputil.TraceHeaders() {
+		req2.Header.Set(k, v)
+	}
 	client := httputil.NewTLSClient(r.Cfg.Proxy, true, r.Identity.ChromeVer)
 	resp2, err := client.Do(req2)
 	if err != nil {
@@ -127,6 +133,9 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 	// 5. GET resumeURL1（不跟随）-> Location 含 authorizationResumptionContext
 	req3, _ := fhttp.NewRequestWithContext(r.requestContext(), "GET", resumeURL1, nil)
 	httputil.SetHeaders(req3, navHeaders)
+	for k, v := range httputil.TraceHeaders() {
+		req3.Header.Set(k, v)
+	}
 	resp3, err := noRedirect.Do(req3)
 	if err != nil {
 		return "", err
@@ -160,6 +169,9 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 		"sec-fetch-mode":     "cors",
 		"sec-fetch-site":     "cross-site",
 	})
+	for k, v := range httputil.TraceHeaders() {
+		req4.Header.Set(k, v)
+	}
 	resp4, err := client.Do(req4)
 	if err != nil {
 		return "", err
@@ -179,6 +191,9 @@ func (r *Registrar) Step14KiroAuthorize() (string, error) {
 	// 7. GET resumeURL2（不跟随）-> Location 含 code
 	req5, _ := fhttp.NewRequestWithContext(r.requestContext(), "GET", resumeURL2, nil)
 	httputil.SetHeaders(req5, navHeaders)
+	for k, v := range httputil.TraceHeaders() {
+		req5.Header.Set(k, v)
+	}
 	resp5, err := noRedirect.Do(req5)
 	if err != nil {
 		return "", err

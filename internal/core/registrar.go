@@ -161,6 +161,9 @@ func (r *Registrar) DoPost(url string, payload interface{}, headers map[string]s
 			return nil, nil, err
 		}
 		httputil.SetHeaders(req, headers)
+		for k, v := range httputil.TraceHeaders() {
+			req.Header.Set(k, v)
+		}
 		resp, err := r.Client.Do(req)
 		if err != nil {
 			lastErr = err
@@ -197,6 +200,9 @@ func (r *Registrar) DoGet(url string, headers map[string]string) ([]byte, int, m
 			return nil, 0, nil, err
 		}
 		httputil.SetHeaders(req, headers)
+		for k, v := range httputil.TraceHeaders() {
+			req.Header.Set(k, v)
+		}
 		resp, err := r.Client.Do(req)
 		if err != nil {
 			lastErr = err
@@ -241,6 +247,9 @@ func (r *Registrar) DoPostRaw(url string, payload interface{}, headers map[strin
 			return nil, 0, nil, err
 		}
 		httputil.SetHeaders(req, headers)
+		for k, v := range httputil.TraceHeaders() {
+			req.Header.Set(k, v)
+		}
 		resp, err := r.Client.Do(req)
 		if err != nil {
 			lastErr = err

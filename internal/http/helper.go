@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
+	"strconv"
 	"strings"
 
 	fhttp "github.com/bogdanfinn/fhttp"
@@ -159,6 +160,20 @@ func SetHeaders(req *fhttp.Request, headers map[string]string) {
 		order = append(order, strings.ToLower(k))
 	}
 	req.Header[fhttp.HeaderOrderKey] = order
+}
+
+// TraceHeaders 生成 Datadog APM 追踪头
+func TraceHeaders() map[string]string {
+	traceID := fmt.Sprintf("%016x%016x", rand.Uint64(), rand.Uint64())
+	parentID := fmt.Sprintf("%016x", rand.Uint64())
+	return map[string]string{
+		"traceparent":                 "00-" + traceID + "-" + parentID + "-01",
+		"tracestate":                  "dd=s:1;o:rum",
+		"x-datadog-origin":            "rum",
+		"x-datadog-parent-id":         parentID,
+		"x-datadog-sampling-priority": "1",
+		"x-datadog-trace-id":          strconv.FormatUint(rand.Uint64(), 10),
+	}
 }
 
 // SaveCookies 从 Set-Cookie 头中提取并保存 cookies
