@@ -55,3 +55,4 @@ wailsjs/
 
 # Claude Code local session data
 .claude/
+.omo/

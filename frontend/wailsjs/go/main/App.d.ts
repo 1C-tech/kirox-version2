@@ -8,6 +8,8 @@ export function AddOutlookAccounts(arg1:string):Promise<Record<string, any>>;
 
 export function AddProxyEntry(arg1:string,arg2:string,arg3:number):Promise<Record<string, any>>;
 
+export function AutoDetectClash():Promise<Record<string, any>>;
+
 export function CancelUpdate():Promise<Record<string, any>>;
 
 export function ChangeSubscriptionForAccount(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string):Promise<Record<string, any>>;
@@ -67,6 +69,8 @@ export function GetSubscriptionPlans(arg1:string):Promise<Record<string, any>>;
 export function GetTaskStatus():Promise<Record<string, any>>;
 
 export function ImportOutlookFile(arg1:string):Promise<Record<string, any>>;
+
+export function ListClashGroups(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function ListProxyPool():Promise<Array<proxy.PoolEntry>>;
 

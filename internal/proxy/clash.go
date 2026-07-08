@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -309,6 +311,44 @@ func fuzzyMatchGroup(proxiesData map[string]interface{}, desired string) string 
 // 1. GET /proxies 一次性获取全部代理
 // 2. 模糊匹配实际策略组名
 // 3. 返回成员列表
+// ListGroups 从 Clash API 获取所有可用的策略组名称
+func ListGroups(apiURL, secret string) ([]string, error) {
+	if apiURL == "" {
+		return nil, fmt.Errorf("API URL 为空")
+	}
+	req, err := http.NewRequest("GET", strings.TrimRight(apiURL, "/")+"/proxies", nil)
+	if err != nil {
+		return nil, err
+	}
+	if secret != "" {
+		req.Header.Set("Authorization", "Bearer "+secret)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("连接 Clash API 失败: %w", err)
+	}
+	defer resp.Body.Close()
+	var data struct {
+		Proxies map[string]interface{} `json:"proxies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+	var groups []string
+	for key, val := range data.Proxies {
+		v, ok := val.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if _, hasAll := v["all"]; hasAll {
+			groups = append(groups, key)
+		}
+	}
+	sort.Strings(groups)
+	return groups, nil
+}
+
 func (r *ClashRotator) getGroupProxies() ([]string, string, error) {
 	resp, err := r.doRequest("GET", "/proxies", nil)
 	if err != nil {
@@ -481,6 +521,47 @@ func (r *ClashRotator) switchProxy(name string) error {
 		return fmt.Errorf("API 返回 %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 	return nil
+}
+
+// AutoDetectClashConfig 从 Clash 配置文件自动读取 external-controller 和 secret。
+// 典型路径: %USERPROFILE%\.config\clash\config.yaml（CFW）/ ~/.config/clash/config.yaml（Linux）
+func AutoDetectClashConfig() (apiURL, secret string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", ""
+	}
+	path := filepath.Join(home, ".config", "clash", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// 也尝试 clash-verge / mihomo 路径
+		path2 := filepath.Join(home, ".config", "mihomo", "config.yaml")
+		if data2, e2 := os.ReadFile(path2); e2 == nil {
+			data = data2
+		} else {
+			return "", ""
+		}
+	}
+	var ec, sec string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "external-controller:") || strings.HasPrefix(line, "external-controller ") {
+			ec = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "external-controller:"), "external-controller "))
+			ec = strings.Trim(ec, "\"'")
+		}
+		if strings.HasPrefix(line, "secret:") || strings.HasPrefix(line, "secret ") {
+			sec = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "secret:"), "secret "))
+			sec = strings.Trim(sec, "\"'")
+		}
+	}
+	if ec == "" {
+		return "", ""
+	}
+	if !strings.Contains(ec, "://") {
+		apiURL = "http://" + ec
+	} else {
+		apiURL = ec
+	}
+	return apiURL, sec
 }
 
 func (r *ClashRotator) getMixedPort() (string, error) {

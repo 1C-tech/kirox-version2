@@ -10,6 +10,10 @@ export function AddProxyEntry(arg1, arg2, arg3) {
   return window['go']['main']['App']['AddProxyEntry'](arg1, arg2, arg3);
 }
 
+export function AutoDetectClash() {
+  return window['go']['main']['App']['AutoDetectClash']();
+}
+
 export function CancelUpdate() {
   return window['go']['main']['App']['CancelUpdate']();
 }
@@ -128,6 +132,10 @@ export function GetTaskStatus() {
 
 export function ImportOutlookFile(arg1) {
   return window['go']['main']['App']['ImportOutlookFile'](arg1);
+}
+
+export function ListClashGroups(arg1, arg2) {
+  return window['go']['main']['App']['ListClashGroups'](arg1, arg2);
 }
 
 export function ListProxyPool() {

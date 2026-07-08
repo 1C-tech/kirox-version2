@@ -393,6 +393,28 @@ func (a *App) CancelUpdate() map[string]interface{} {
 	return updater.CancelUpdate()
 }
 
+// AutoDetectClash 从本地 Clash 配置文件自动获取 API 地址和 Secret
+func (a *App) AutoDetectClash() map[string]interface{} {
+	apiURL, secret := proxy.AutoDetectClashConfig()
+	if apiURL == "" {
+		return map[string]interface{}{"success": false, "error": "未找到 Clash 配置文件"}
+	}
+	return map[string]interface{}{
+		"success": true,
+		"api_url": apiURL,
+		"secret":  secret,
+	}
+}
+
+// ListClashGroups 获取 Clash 所有可用的策略组列表
+func (a *App) ListClashGroups(apiURL, secret string) map[string]interface{} {
+	groups, err := proxy.ListGroups(apiURL, secret)
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	return map[string]interface{}{"success": true, "groups": groups}
+}
+
 // ---- 订阅：一键获取支付链接 ----
 
 func accountFromMap(m map[string]interface{}) subscription.Account {

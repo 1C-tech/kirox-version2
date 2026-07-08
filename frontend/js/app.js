@@ -304,7 +304,7 @@ function loadAntiDetectConfig() {
       window.antiDetectConfig = {
         clash_enable: false,
         clash_fastest: false,
-        clash_api: 'http://127.0.0.1:49544',
+        clash_api: 'http://127.0.0.1:9090',
         clash_secret: '',
         clash_group: '节点选择',
         clash_mixed_port: 7890,
@@ -338,12 +338,53 @@ function syncAntiDetectToDOM() {
   if ((el = id('cfg-trace-headers'))) el.checked = !!cfg.trace_headers;
 }
 
+async function autoDetectClash() {
+  var apiEl = document.getElementById('cfg-clash-api');
+  var secretEl = document.getElementById('cfg-clash-secret');
+  try {
+    var res = await window.go.main.App.AutoDetectClash();
+    if (res && res.success) {
+      apiEl.value = res.api_url || '';
+      secretEl.value = res.secret || '';
+      showToast('已自动检测 Clash 配置');
+      refreshClashGroups(); // 自动刷新策略组列表
+    } else {
+      showToast((res && res.error) || '未检测到 Clash 配置', 'error');
+    }
+  } catch (e) {
+    showToast('自动检测失败: ' + e, 'error');
+  }
+}
+
+async function refreshClashGroups() {
+  var api = document.getElementById('cfg-clash-api').value.trim();
+  var secret = document.getElementById('cfg-clash-secret').value.trim();
+  var sel = document.getElementById('cfg-clash-group');
+  if (!api) { sel.innerHTML = '<option value="">请先填写 API URL</option>'; return; }
+  var prevVal = sel.value; // 保留当前选中值
+  sel.innerHTML = '<option value="">加载中…</option>';
+  try {
+    var res = await window.go.main.App.ListClashGroups(api, secret);
+    if (res && res.success) {
+      var groups = res.groups || [];
+      if (!groups.length) { sel.innerHTML = '<option value="">无可用策略组</option>'; return; }
+      sel.innerHTML = groups.map(function(g) {
+        return '<option value="' + g + '"' + (g === prevVal ? ' selected' : '') + '>' + g + '</option>';
+      }).join('');
+    } else {
+      sel.innerHTML = '<option value="">' + ((res && res.error) || '获取失败') + '</option>';
+    }
+  } catch (e) {
+    sel.innerHTML = '<option value="">获取失败: ' + e + '</option>';
+  }
+}
+
 function saveAntiDetectConfig() {
   try {
     var cfg = {
       clash_enable: document.getElementById('cfg-clash-enable').checked,
       clash_fastest: document.getElementById('cfg-clash-fastest').checked,
-      clash_api: document.getElementById('cfg-clash-api').value.trim() || 'http://127.0.0.1:49544',
+      clash_api: document.getElementById('cfg-clash-api').value.trim() || 'http://127.0.0.1:9090',
       clash_secret: document.getElementById('cfg-clash-secret').value.trim() || '',
       clash_group: document.getElementById('cfg-clash-group').value.trim() || '节点选择',
       clash_mixed_port: parseInt(document.getElementById('cfg-clash-mixed-port').value) || 7890,
@@ -381,7 +422,7 @@ function getFormConfig() {
     clashConfig = {
       enable: true,
       fastest_mode: ad.clash_fastest,
-      api_url: ad.clash_api || 'http://127.0.0.1:49544',
+      api_url: ad.clash_api || 'http://127.0.0.1:9090',
       secret: ad.clash_secret || '',
       group_name: ad.clash_group || '节点选择',
       mixed_port: ad.clash_mixed_port || 7890,

@@ -494,11 +494,15 @@
                   </label>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;">
-                  <input type="text" id="cfg-clash-api" placeholder="API URL (http://127.0.0.1:49544)" class="form-input">
-                  <input type="text" id="cfg-clash-secret" placeholder="Secret" class="form-input">
+                  <input type="text" id="cfg-clash-api" placeholder="API URL (http://127.0.0.1:9090)" class="form-input" style="flex:1;">
+                  <input type="text" id="cfg-clash-secret" placeholder="Secret" class="form-input" style="flex:1;">
+                  <button class="btn btn-dark btn-sm" onclick="autoDetectClash()" style="white-space:nowrap;">自动检测</button>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;width:100%;">
-                  <input type="text" id="cfg-clash-group" placeholder='策略组名 (默认 "节点选择")' class="form-input">
+                  <div style="display:flex;gap:4px;">
+                    <select id="cfg-clash-group" class="form-input" style="flex:1;"><option value="">加载中…</option></select>
+                    <button class="btn btn-dark btn-sm" onclick="refreshClashGroups()" style="white-space:nowrap;">刷新组</button>
+                  </div>
                   <input type="number" id="cfg-clash-mixed-port" placeholder="mixed-port (默认 7890)" class="form-input">
                   <input type="text" id="cfg-clash-blacklist" placeholder='黑名单 (逗号分隔, 如 港,HK,台,TW)' class="form-input">
                 </div>
