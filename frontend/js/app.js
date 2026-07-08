@@ -305,7 +305,6 @@ function loadAntiDetectConfig() {
         clash_enable: false,
         clash_fastest: false,
         clash_api: 'http://127.0.0.1:9090',
-        clash_secret: '',
         clash_group: '节点选择',
         clash_mixed_port: 7890,
         clash_blacklist: [],
@@ -329,7 +328,6 @@ function syncAntiDetectToDOM() {
   if ((el = id('cfg-clash-enable'))) el.checked = !!cfg.clash_enable;
   if ((el = id('cfg-clash-fastest'))) el.checked = !!cfg.clash_fastest;
   if ((el = id('cfg-clash-api'))) el.value = cfg.clash_api || '';
-  if ((el = id('cfg-clash-secret'))) el.value = cfg.clash_secret || '';
   if ((el = id('cfg-clash-group'))) el.value = cfg.clash_group || '节点选择';
   if ((el = id('cfg-clash-mixed-port'))) el.value = cfg.clash_mixed_port || 7890;
   if ((el = id('cfg-clash-blacklist'))) el.value = (cfg.clash_blacklist || []).join(', ');
@@ -340,13 +338,11 @@ function syncAntiDetectToDOM() {
 
 async function autoDetectClash() {
   var apiEl = document.getElementById('cfg-clash-api');
-  var secretEl = document.getElementById('cfg-clash-secret');
   try {
     var res = await window.go.main.App.AutoDetectClash();
     if (res && res.success) {
       apiEl.value = res.api_url || '';
-      secretEl.value = res.secret || '';
-      showToast('已自动检测 Clash 配置');
+      showToast('已自动检测 Clash 配置 (Secret 已自动读取)');
       refreshClashGroups(); // 自动刷新策略组列表
     } else {
       showToast((res && res.error) || '未检测到 Clash 配置', 'error');
@@ -358,13 +354,12 @@ async function autoDetectClash() {
 
 async function refreshClashGroups() {
   var api = document.getElementById('cfg-clash-api').value.trim();
-  var secret = document.getElementById('cfg-clash-secret').value.trim();
   var sel = document.getElementById('cfg-clash-group');
   if (!api) { sel.innerHTML = '<option value="">请先填写 API URL</option>'; return; }
   var prevVal = sel.value; // 保留当前选中值
   sel.innerHTML = '<option value="">加载中…</option>';
   try {
-    var res = await window.go.main.App.ListClashGroups(api, secret);
+    var res = await window.go.main.App.ListClashGroups(api, '');
     if (res && res.success) {
       var groups = res.groups || [];
       if (!groups.length) { sel.innerHTML = '<option value="">无可用策略组</option>'; return; }
@@ -385,7 +380,6 @@ function saveAntiDetectConfig() {
       clash_enable: document.getElementById('cfg-clash-enable').checked,
       clash_fastest: document.getElementById('cfg-clash-fastest').checked,
       clash_api: document.getElementById('cfg-clash-api').value.trim() || 'http://127.0.0.1:9090',
-      clash_secret: document.getElementById('cfg-clash-secret').value.trim() || '',
       clash_group: document.getElementById('cfg-clash-group').value.trim() || '节点选择',
       clash_mixed_port: parseInt(document.getElementById('cfg-clash-mixed-port').value) || 7890,
       clash_blacklist: (document.getElementById('cfg-clash-blacklist').value.trim() || '')
@@ -423,7 +417,6 @@ function getFormConfig() {
       enable: true,
       fastest_mode: ad.clash_fastest,
       api_url: ad.clash_api || 'http://127.0.0.1:9090',
-      secret: ad.clash_secret || '',
       group_name: ad.clash_group || '节点选择',
       mixed_port: ad.clash_mixed_port || 7890,
       blacklist: ad.clash_blacklist || []

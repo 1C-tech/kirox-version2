@@ -453,9 +453,17 @@ func runBatch(req StartTaskRequest, emailProvider string, outlookAccounts []emai
 		// ===== 反检测：代理轮换 + IP 预检 =====
 		// 参考 CPA: utils/proxy_manager.py _do_smart_switch() + register.py L53-67
 		if taskCfg.ClashConfig != nil && taskCfg.ClashConfig.Enable {
+			// Secret 为空时自动从本地 config.yaml 读取
+			secret := taskCfg.ClashConfig.Secret
+			if secret == "" {
+				_, sec := proxy.AutoDetectClashConfig()
+				if sec != "" {
+					secret = sec
+				}
+			}
 			rotator := proxy.NewClashRotator(
 				taskCfg.ClashConfig.APIURL,
-				taskCfg.ClashConfig.Secret,
+				secret,
 				taskCfg.ClashConfig.GroupName,
 				taskCfg.ClashConfig.MixedPort,
 				taskCfg.ClashConfig.Blacklist,

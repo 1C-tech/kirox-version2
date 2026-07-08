@@ -407,7 +407,14 @@ func (a *App) AutoDetectClash() map[string]interface{} {
 }
 
 // ListClashGroups 获取 Clash 所有可用的策略组列表
+// secret 为空时自动从本地 config.yaml 读取
 func (a *App) ListClashGroups(apiURL, secret string) map[string]interface{} {
+	if secret == "" {
+		_, sec := proxy.AutoDetectClashConfig()
+		if sec != "" {
+			secret = sec
+		}
+	}
 	groups, err := proxy.ListGroups(apiURL, secret)
 	if err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}
@@ -483,14 +490,40 @@ func (a *App) DeleteOutputAccounts(emailsJSON string) map[string]interface{} {
 
 // ExportAccounts 批量导出账号为完整 Kiro JSON 格式（并发，默认 5）
 func (a *App) ExportAccounts(accountsJSON string) map[string]interface{} {
-	var inputs []core.ExportAccountInput
-	if err := json.Unmarshal([]byte(accountsJSON), &inputs); err != nil {
-		return map[string]interface{}{"error": "参数格式错误: " + err.Error()}
+	// 直接返回 accounts.json 原始格式（含 aws 凭证、kiro 凭证、subscription 等）
+	// 前端传入的 JSON 数组用于筛选邮箱：传空数组则导出全部
+	var emails []string
+	if accountsJSON != "" {
+		var inputs []core.ExportAccountInput
+		if err := json.Unmarshal([]byte(accountsJSON), &inputs); err == nil {
+			for _, in := range inputs {
+				if in.Email != "" {
+					emails = append(emails, in.Email)
+				}
+			}
+		}
 	}
-	results, errs := core.ExportAccounts(inputs, 5)
+	items, err := data.LoadAccounts(storage.GetResultOutputDir())
+	if err != nil {
+		return map[string]interface{}{"error": "加载账号失败: " + err.Error()}
+	}
+	// 筛选
+	if len(emails) > 0 {
+		emailSet := make(map[string]bool, len(emails))
+		for _, e := range emails {
+			emailSet[e] = true
+		}
+		filtered := make([]map[string]interface{}, 0)
+		for _, item := range items {
+			if e, _ := item["email"].(string); emailSet[e] {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
 	return map[string]interface{}{
-		"accounts": results,
-		"errors":   errs,
+		"accounts": items,
+		"errors":   ([]map[string]interface{})(nil),
 	}
 }
 
