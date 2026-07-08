@@ -29,7 +29,9 @@ var subState = {
   plans: [],
   planType: '',
   outputDir: '',
-  running: false
+  running: false,
+  pageSize: 20,     // 每页条数
+  currentPage: 1    // 当前页码
 };
 
 function escapeHtml(s) {
@@ -101,50 +103,98 @@ function updateSubProgress() {
   progress.textContent = parts.join(' · ');
 }
 
+function renderSubRow(a, idx) {
+  var statusHtml = '';
+  if (a.status === 'idle') statusHtml = '<span style="color:var(--muted);">' + _subT('status.pending', '待获取') + '</span>';
+  else if (a.status === 'loading') statusHtml = '<span style="color:#3b82f6;">' + _subT('status.fetching', '获取中…') + '</span>';
+  else if (a.status === 'success') statusHtml = '<span style="color:#10b981;">' + _subT('status.ready', '已就绪') + '</span>';
+  else if (a.status === 'suspended') statusHtml = '<span style="color:#f59e0b;cursor:pointer;text-decoration:underline;" onclick="showSubErrorDetail(' + idx + ')" title="' + _subT('subscription.clickForDetail', '点击查看详情') + '">' + _subT('status.suspended', '已封禁') + '</span>';
+  else if (a.status === 'error') statusHtml = '<span style="color:#ef4444;cursor:pointer;text-decoration:underline;" onclick="showSubErrorDetail(' + idx + ')" title="' + _subT('subscription.clickForResponse', '点击查看详细响应') + '">' + _subT('status.failed', '失败') + '</span>';
+
+  var btnStyle = 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 6px;cursor:pointer;color:var(--text);display:inline-flex;align-items:center;justify-content:center;';
+  var iconOpen = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+  var iconCopy = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  var iconFetch = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>';
+
+  var actions = '';
+  if (a.status === 'success' && a.url) {
+    actions =
+      '<button style="' + btnStyle + '" title="' + _subT('subscription.openLink', '打开链接') + '" onclick="openSubLink(' + idx + ')">' + iconOpen + '</button>' +
+      '<button style="' + btnStyle + '" title="' + _subT('subscription.copyLink', '复制链接') + '" onclick="copySubLink(' + idx + ')">' + iconCopy + '</button>';
+  }
+  var isRefetch = a.status === 'success' || a.status === 'error' || a.status === 'suspended';
+  actions +=
+    '<button class="btn btn-dark btn-sm" onclick="fetchOneSubLink(' + idx + ')"' + (a.status === 'loading' ? ' disabled' : '') + '>' + (isRefetch ? _subT('subscription.refetch', '重新获取') : _subT('subscription.fetch', '获取')) + '</button>';
+
+  return (
+    '<tr style="border-top:1px solid var(--border);">' +
+      '<td style="padding:8px 12px;"><input type="checkbox" data-sub-idx="' + idx + '" ' + (a.selected ? 'checked' : '') + ' onchange="toggleSubRow(' + idx + ', this.checked)"></td>' +
+      '<td style="padding:8px;color:var(--muted);font-size:12px;">' + (idx + 1) + '</td>' +
+      '<td style="padding:8px;">' + escapeHtml(a.email) + '</td>' +
+      '<td style="padding:8px;font-size:12px;color:var(--muted);">' + escapeHtml(a.subscription) + '</td>' +
+      '<td style="padding:8px;font-size:12px;">' + statusHtml + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;display:flex;gap:4px;justify-content:flex-end;">' + actions + '</td>' +
+    '</tr>'
+  );
+}
+
 function renderSubTable() {
   var body = document.getElementById('sub-table-body');
   if (!subState.accounts.length) {
     body.innerHTML = '<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">' + _subT('subscription.emptyOutput', '输出目录下尚无账号，请先注册或调整输出目录。') + '</td></tr>';
     refreshSelectAllChk();
+    renderSubPager();
     return;
   }
-  var rows = subState.accounts.map(function(a, idx) {
-    var statusHtml = '';
-    if (a.status === 'idle') statusHtml = '<span style="color:var(--muted);">' + _subT('status.pending', '待获取') + '</span>';
-    else if (a.status === 'loading') statusHtml = '<span style="color:#3b82f6;">' + _subT('status.fetching', '获取中…') + '</span>';
-    else if (a.status === 'success') statusHtml = '<span style="color:#10b981;">' + _subT('status.ready', '已就绪') + '</span>';
-    else if (a.status === 'suspended') statusHtml = '<span style="color:#f59e0b;cursor:pointer;text-decoration:underline;" onclick="showSubErrorDetail(' + idx + ')" title="' + _subT('subscription.clickForDetail', '点击查看详情') + '">' + _subT('status.suspended', '已封禁') + '</span>';
-    else if (a.status === 'error') statusHtml = '<span style="color:#ef4444;cursor:pointer;text-decoration:underline;" onclick="showSubErrorDetail(' + idx + ')" title="' + _subT('subscription.clickForResponse', '点击查看详细响应') + '">' + _subT('status.failed', '失败') + '</span>';
-
-    var btnStyle = 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 6px;cursor:pointer;color:var(--text);display:inline-flex;align-items:center;justify-content:center;';
-    var iconOpen = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
-    var iconCopy = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
-    var iconFetch = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>';
-    var iconRefetch = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
-
-    var actions = '';
-    if (a.status === 'success' && a.url) {
-      actions =
-        '<button style="' + btnStyle + '" title="' + _subT('subscription.openLink', '打开链接') + '" onclick="openSubLink(' + idx + ')">' + iconOpen + '</button>' +
-        '<button style="' + btnStyle + '" title="' + _subT('subscription.copyLink', '复制链接') + '" onclick="copySubLink(' + idx + ')">' + iconCopy + '</button>';
-    }
-    var isRefetch = a.status === 'success' || a.status === 'error' || a.status === 'suspended';
-    actions +=
-      '<button class="btn btn-dark btn-sm" onclick="fetchOneSubLink(' + idx + ')"' + (a.status === 'loading' ? ' disabled' : '') + '>' + (isRefetch ? _subT('subscription.refetch', '重新获取') : _subT('subscription.fetch', '获取')) + '</button>';
-
-    return (
-      '<tr style="border-top:1px solid var(--border);">' +
-        '<td style="padding:8px 12px;"><input type="checkbox" data-sub-idx="' + idx + '" ' + (a.selected ? 'checked' : '') + ' onchange="toggleSubRow(' + idx + ', this.checked)"></td>' +
-        '<td style="padding:8px;color:var(--muted);font-size:12px;">' + (idx + 1) + '</td>' +
-        '<td style="padding:8px;">' + escapeHtml(a.email) + '</td>' +
-        '<td style="padding:8px;font-size:12px;color:var(--muted);">' + escapeHtml(a.subscription) + '</td>' +
-        '<td style="padding:8px;font-size:12px;">' + statusHtml + '</td>' +
-        '<td style="padding:8px 12px;text-align:right;display:flex;gap:4px;justify-content:flex-end;">' + actions + '</td>' +
-      '</tr>'
-    );
-  });
+  var total = subState.accounts.length;
+  var ps = subState.pageSize || 20;
+  var cp = subState.currentPage || 1;
+  var totalPages = Math.ceil(total / ps);
+  if (cp > totalPages) { subState.currentPage = totalPages; cp = totalPages; }
+  if (cp < 1) { subState.currentPage = 1; cp = 1; }
+  var start = (cp - 1) * ps;
+  var end = Math.min(start + ps, total);
+  var rows = [];
+  for (var i = start; i < end; i++) {
+    rows.push(renderSubRow(subState.accounts[i], i));
+  }
   body.innerHTML = rows.join('');
   refreshSelectAllChk();
+  renderSubPager();
+}
+
+function renderSubPager() {
+  var el = document.getElementById('sub-pager');
+  if (!el) return;
+  var total = subState.accounts.length;
+  var ps = subState.pageSize || 20;
+  var cp = subState.currentPage || 1;
+  var totalPages = Math.ceil(total / ps);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  var html = '<span style="font-size:12px;color:var(--muted);">共 ' + total + ' 条 / ' + totalPages + ' 页</span>';
+  html += ' <button class="btn btn-dark btn-sm" onclick="goSubPage(' + (cp - 1) + ')"' + (cp <= 1 ? ' disabled' : '') + '>‹</button>';
+  var maxShow = 5;
+  var pStart = Math.max(1, cp - Math.floor(maxShow / 2));
+  var pEnd = Math.min(totalPages, pStart + maxShow - 1);
+  if (pEnd - pStart < maxShow - 1) pStart = Math.max(1, pEnd - maxShow + 1);
+  for (var p = pStart; p <= pEnd; p++) {
+    html += ' <button class="btn btn-dark btn-sm" onclick="goSubPage(' + p + ')"' + (p === cp ? ' style="background:var(--accent,#3b82f6);color:#fff;"' : '') + '>' + p + '</button>';
+  }
+  html += ' <button class="btn btn-dark btn-sm" onclick="goSubPage(' + (cp + 1) + ')"' + (cp >= totalPages ? ' disabled' : '') + '>›</button>';
+  html += ' <select onchange="subState.pageSize=parseInt(this.value);subState.currentPage=1;renderSubTable();updateSubProgress();" style="font-size:12px;padding:2px 4px;">'
+    + '<option value="10"' + (ps === 10 ? ' selected' : '') + '>10条/页</option>'
+    + '<option value="20"' + (ps === 20 ? ' selected' : '') + '>20条/页</option>'
+    + '<option value="50"' + (ps === 50 ? ' selected' : '') + '>50条/页</option>'
+    + '<option value="100"' + (ps === 100 ? ' selected' : '') + '>100条/页</option>'
+    + '</select>';
+  el.innerHTML = html;
+}
+
+function goSubPage(p) {
+  var totalPages = Math.ceil(subState.accounts.length / (subState.pageSize || 20));
+  if (p < 1 || p > totalPages) return;
+  subState.currentPage = p;
+  renderSubTable();
 }
 
 function refreshSelectAllChk() {

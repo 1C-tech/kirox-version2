@@ -22,8 +22,8 @@ func runDesktopApp() {
 
 	appOpts := &options.App{
 		Title:  "Kiro 注册机",
-		Width:  900,
-		Height: 600,
+		Width:  1100,
+		Height: 750,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
