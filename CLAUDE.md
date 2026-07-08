@@ -157,8 +157,8 @@ cd frontend && npm run build
 # 仅编译 Go 后端
 go build ./...
 
-# 完整打包
-wails build
+# 完整打包（wails 不在 PATH，需用完整路径）
+/c/Users/lu/go/bin/wails build
 ```
 
 ## 打包流程
@@ -179,7 +179,8 @@ go build ./...
 cd frontend && npm run build && cd ..
 
 # 3. Wails 打包（生成可执行文件）
-wails build
+# 注意：wails 不在系统 PATH 中，位于 ~/go/bin/wails.exe
+/c/Users/lu/go/bin/wails build
 ```
 
 产物输出到 `build/bin/kirox.exe`（Windows）或 `build/bin/kirox`（macOS/Linux）。
@@ -189,7 +190,9 @@ wails build
 - [ ] `go build ./...` 无错误
 - [ ] `cd frontend && npm run build` 前端构建成功
 - [ ] 前端 `dist/` 目录已更新
-- [ ] `wails build` 成功生成可执行文件
+- [ ] `/c/Users/lu/go/bin/wails build` 成功生成可执行文件
+
+> **注意**：`wails` 命令不在系统 PATH 中。PowerShell 无法直接运行，需用 Bash 执行完整路径 `/c/Users/lu/go/bin/wails build`。`go` 命令在 PowerShell 中同样不可用，Go 编译检查也需在 Bash 中执行。
 
 ## 关键约定
 
@@ -211,3 +214,19 @@ wails build
 | 构建 | Node.js build.js（复制静态文件到 dist/） |
 | 打包 | Wails CLI → 单一可执行文件 |
 | 平台 | Windows 10+ / macOS / Linux |
+
+## Git 提交规范
+
+```
+feat: 中文描述
+fix: 中文描述
+```
+
+| 前缀 | 用途 |
+|------|------|
+| `feat:` | 新功能 |
+| `fix:` | Bug 修复 |
+
+## 关键注意事项
+
+- **订阅页自动刷新冲突**：订阅页有 3 秒间隔的 `setInterval(reloadSubscriptionAccounts)`，会完全重建 `subState.accounts`。任何修改该数组的异步操作（批量获取、单个获取）都必须先 `stopSubAutoRefresh()` 再 `startSubAutoRefresh()`，否则进度状态会被定时器覆盖。

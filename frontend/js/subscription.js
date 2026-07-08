@@ -62,6 +62,11 @@ async function reloadSubscriptionAccounts() {
   }
   var list = res.accounts || [];
   subState.rawAccounts = list; // 保留原始字段供导出使用
+
+  // 保留已有选中状态（防止自动刷新时勾选被清空）
+  var prevSelected = {};
+  subState.accounts.forEach(function(a) { if (a.selected) prevSelected[a.email] = true; });
+
   subState.accounts = list.map(function(a) {
     var hasCached = !!a.cachedUrl;
     return {
@@ -73,7 +78,7 @@ async function reloadSubscriptionAccounts() {
       planType: a.cachedPlanType || '',
       fetchedAt: a.cachedFetchedAt || '',
       error: '',
-      selected: false
+      selected: !!prevSelected[a.email]
     };
   });
   renderSubTable();
@@ -303,6 +308,9 @@ async function fetchOneSubLink(idx) {
 async function doFetchSubLink(idx) {
   var a = subState.accounts[idx];
   if (!a || !subState.planType) return;
+  // 暂停自动刷新，避免后台 reload 覆盖正在更新的状态
+  var isStandalone = !subState.running;
+  if (isStandalone) stopSubAutoRefresh();
   a.status = 'loading'; a.url = ''; a.error = '';
   renderSubTable(); updateSubProgress();
   try {
@@ -316,6 +324,7 @@ async function doFetchSubLink(idx) {
         var rmIdx = subState.accounts.findIndex(function(x) { return x.email === bannedEmail; });
         if (rmIdx >= 0) subState.accounts.splice(rmIdx, 1);
         renderSubTable(); updateSubProgress();
+        if (isStandalone) startSubAutoRefresh();
         return;
       }
       a.status = 'suspended';
@@ -327,6 +336,7 @@ async function doFetchSubLink(idx) {
     a.status = 'error'; a.error = String(e);
   }
   renderSubTable(); updateSubProgress();
+  if (isStandalone) startSubAutoRefresh();
 }
 
 async function batchFetchSubscriptionLinks() {
@@ -335,6 +345,7 @@ async function batchFetchSubscriptionLinks() {
   if (!subState.planType) { showToast(_subT('subscription.loadPickPlan', '请先加载并选择计划'), 'error'); return; }
   if (subState.running) return;
   subState.running = true;
+  stopSubAutoRefresh(); // 暂停自动刷新，避免后台 reload 覆盖批量进度
   document.getElementById('sub-batch-btn').disabled = true;
 
   // 用 email 作为任务标识，避免封禁删除时下标错位
@@ -367,6 +378,7 @@ async function batchFetchSubscriptionLinks() {
   subState.running = false;
   document.getElementById('sub-batch-btn').disabled = false;
   updateSubProgress();
+  startSubAutoRefresh(); // 批量完成后恢复自动刷新
 }
 
 function openSubLink(idx) {
@@ -546,6 +558,7 @@ var subRefreshTimer = null;
 
 function startSubAutoRefresh() {
   stopSubAutoRefresh();
+  if (subState.running) return; // 批量任务进行中，不启动自动刷新
   // 立即加载一次（switchPage 已调用 reloadSubscriptionAccounts，这里仅保底）
   subRefreshTimer = setInterval(reloadSubscriptionAccounts, 3000);
 }

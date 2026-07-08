@@ -35,6 +35,9 @@ function switchPage(pageId) {
   if (pageId === 'info') {
     loadInfoVersion();
   }
+  if (pageId === 'settings') {
+    syncAntiDetectToDOM();
+  }
   if (pageId === 'subscription') {
     reloadSubscriptionAccounts();
     startSubAutoRefresh();
