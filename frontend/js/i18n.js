@@ -76,7 +76,7 @@
         startBtn: '开始注册', stopBtn: '停止'
       },
       accounts: {
-        moemailTitle: 'MoeMail 临时邮箱', cloudmailTitle: 'Cloud-Mail 自部署邮箱', addConfig: '添加新配置',
+        moemailTitle: 'MoeMail 临时邮箱', cloudmailTitle: 'Cloud-Mail 自部署邮箱', cftempemailTitle: 'CF邮箱', addConfig: '添加新配置',
         configName: '名称', optional: '(可选)', configNamePlaceholder: '自动生成',
         apiUrl: 'API URL', apiKey: 'API Key',
         testConnection: '测试连接', addConfigBtn: '添加配置',
@@ -336,7 +336,7 @@
         startBtn: 'Start', stopBtn: 'Stop'
       },
       accounts: {
-        moemailTitle: 'MoeMail temp mail', cloudmailTitle: 'Cloud-Mail (self-hosted)', addConfig: 'Add config',
+        moemailTitle: 'MoeMail temp mail', cloudmailTitle: 'Cloud-Mail (self-hosted)', cftempemailTitle: 'CF Mail', addConfig: 'Add config',
         configName: 'Name', optional: '(optional)', configNamePlaceholder: 'auto-generated',
         apiUrl: 'API URL', apiKey: 'API Key',
         testConnection: 'Test connection', addConfigBtn: 'Add config',
@@ -596,7 +596,7 @@
         startBtn: '登録開始', stopBtn: '停止'
       },
       accounts: {
-        moemailTitle: 'MoeMail 使い捨てメール', cloudmailTitle: 'Cloud-Mail (自己ホスト型)', addConfig: '新規追加',
+        moemailTitle: 'MoeMail 使い捨てメール', cloudmailTitle: 'Cloud-Mail (自己ホスト型)', cftempemailTitle: 'CFメール', addConfig: '新規追加',
         configName: '名前', optional: '(任意)', configNamePlaceholder: '自動生成',
         apiUrl: 'API URL', apiKey: 'API Key',
         testConnection: '接続テスト', addConfigBtn: '設定を追加',
